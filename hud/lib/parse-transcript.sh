@@ -43,6 +43,40 @@ parse_transcript() {
     | jq -r 'select(.type=="assistant" and .message.usage) |
       .message | "\(.model // "unknown") \(.usage.input_tokens // 0) \(.usage.output_tokens // 0) \(.usage.cache_read_input_tokens // 0) \(.usage.cache_creation_input_tokens // 0)"' 2>/dev/null)
 
+  # 낭비 감지 (최근 20개 도구 호출 분석)
+  G_WASTE_WARN=""
+  local recent_tools
+  recent_tools=$(tail -100 "$transcript" 2>/dev/null \
+    | jq -r 'select(.type=="tool_use") | "\(.name) \(.model // "unknown")"' 2>/dev/null \
+    | tail -20)
+
+  if [ -n "$recent_tools" ]; then
+    # opus에서 Read 5회 연속 → haiku 권장
+    local opus_reads
+    opus_reads=$(echo "$recent_tools" | grep -E "Read.*opus" | wc -l | tr -d ' ')
+    if [ "$opus_reads" -ge 5 ]; then
+      G_WASTE_WARN="opus Read ${opus_reads}회 — haiku 전환 권장"
+    fi
+
+    # Read 결과 2000+ 토큰 빈발 → Grep 추천
+    local big_reads
+    big_reads=$(tail -50 "$transcript" 2>/dev/null \
+      | jq -r 'select(.type=="tool_result" and .content) | .content | length' 2>/dev/null \
+      | awk '$1 > 2000 {c++} END {print c+0}')
+    if [ "$big_reads" -ge 3 ] && [ -z "$G_WASTE_WARN" ]; then
+      G_WASTE_WARN="대용량 Read ${big_reads}회 — Grep 추천"
+    fi
+  fi
+
+  # 캐시 miss 연속 감지 (최근 3턴 모두 cache_read=0이면 경고)
+  local cache_misses
+  cache_misses=$(tail -100 "$transcript" 2>/dev/null \
+    | jq -r 'select(.type=="assistant" and .message.usage) | .message.usage.cache_read_input_tokens // 0' 2>/dev/null \
+    | tail -3 | awk '$1 == 0 {c++} END {print c+0}')
+  if [ "$cache_misses" -ge 3 ] && [ -z "$G_WASTE_WARN" ]; then
+    G_WASTE_WARN="cache miss 3턴 연속 — /compact 타이밍 조정"
+  fi
+
   if [ -n "$model_data" ]; then
     # 모델별 비용 계산 + 캐시 히트율
     local result

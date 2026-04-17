@@ -112,6 +112,12 @@ if [ -d "$SCRIPT_DIR/adapters" ]; then
   done
 fi
 
+# ====== 낭비 경고 (3줄째 동적 전환) ======
+# 경고 있으면 3줄째를 경고로 교체 (통계보다 액션이 우선)
+if [ -n "$G_WASTE_WARN" ]; then
+  LINE3="💡 ${G_WASTE_WARN}"
+fi
+
 # ====== 출력 ======
 echo -e "$LINE1"
 echo -e "$LINE2"
