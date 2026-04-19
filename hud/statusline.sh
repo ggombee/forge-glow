@@ -8,6 +8,8 @@
 # L2: transcript.jsonl (모든 사용자)
 # L3: code-forge usage.jsonl (code-forge 사용자)
 # L4: adapters/ (OMC, ECC 등)
+# L5: OTel file exporter (opt-in, CLAUDE_CODE_ENABLE_TELEMETRY=1)
+#     — L5 활성 시 L2의 모델별 비용/캐시 히트율을 정확값으로 덮어쓰기
 
 set -uo pipefail
 
@@ -18,6 +20,8 @@ source "$SCRIPT_DIR/lib/render.sh"
 source "$SCRIPT_DIR/lib/parse-stdin.sh"
 source "$SCRIPT_DIR/lib/parse-transcript.sh"
 source "$SCRIPT_DIR/lib/parse-forge.sh"
+source "$SCRIPT_DIR/lib/parse-otel.sh"
+source "$SCRIPT_DIR/lib/parse-codex.sh"
 
 # ====== stdin JSON 읽기 ======
 STDIN_JSON=$(cat)
@@ -30,6 +34,18 @@ parse_transcript "$G_TRANSCRIPT"
 
 # ====== L3: code-forge 파싱 ======
 parse_forge "$G_SESSION_ID"
+
+# ====== L5: OTel 파싱 (opt-in, 가장 정확) ======
+parse_otel
+
+# ====== Codex CLI 병렬 세션 감지 ======
+parse_codex
+
+# L5 활성 시 L2 근사값을 정확값으로 덮어쓰기
+if [ "$G_OTEL_AVAILABLE" = true ]; then
+  [ -n "$G_OTEL_MODEL_COSTS" ] && G_MODEL_COSTS="$G_OTEL_MODEL_COSTS"
+  [ -n "$G_OTEL_CACHE_HIT_PCT" ] && G_CACHE_HIT_PCT="$G_OTEL_CACHE_HIT_PCT"
+fi
 
 # ====== 1줄째: 모델 + 프로젝트 + 비용 ======
 LINE1=""
@@ -100,6 +116,15 @@ RATE_7D=$(rate_limit_display "$G_RATE_7D" "7d")
 if [ -n "$RATE_5H" ] || [ -n "$RATE_7D" ]; then
   LINE3+="  ⏱ ${RATE_5H}"
   [ -n "$RATE_7D" ] && LINE3+=" ${RATE_7D}"
+fi
+
+# Codex 활성 세션 표시 (병렬 작업 중일 때)
+if [ "$G_CODEX_AVAILABLE" = true ] && [ "${G_CODEX_TURNS:-0}" -gt 0 ] 2>/dev/null; then
+  CODEX_DISP="🤖 codex"
+  [ -n "$G_CODEX_MODEL" ] && CODEX_DISP="${CODEX_DISP}(${G_CODEX_MODEL})"
+  [ -n "$G_CODEX_COST" ] && CODEX_DISP="${CODEX_DISP} \$${G_CODEX_COST}"
+  [ -n "$G_CODEX_CTX_PCT" ] && CODEX_DISP="${CODEX_DISP} ctx:${G_CODEX_CTX_PCT}%"
+  LINE3+="  ${CODEX_DISP}"
 fi
 
 # ====== 어댑터 실행 (L4) ======

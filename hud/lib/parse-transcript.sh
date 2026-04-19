@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # forge-glow — parse-transcript.sh
 # L2: transcript.jsonl 파싱 — 도구 활동, 서브에이전트, 모델별 비용, 캐시 히트율
+# shellcheck disable=SC2034  # G_* 변수들은 statusline.sh가 sourcing 후 사용
 
 parse_transcript() {
   local transcript="$1"

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # forge-glow — render.sh
 # 프로그레스바, 색상, 이모지 렌더링 유틸리티
+# shellcheck disable=SC2034  # 색상 상수 일부는 예약(추후 사용)
 
 # ANSI 색상
 C_RESET=$'\033[0m'

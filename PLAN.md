@@ -26,54 +26,46 @@ Claude Code statusLine API에 붙는 기본 HUD.
 
 ---
 
-## Phase 2 — transcript 파싱 + 효율성 지표
+## Phase 2 — transcript 파싱 + 효율성 지표 ✅ (완료)
 
 **목표:** 모델별 비용 분리, 캐시 히트율, 낭비 패턴 감지.
 
-- [ ] `hud/lib/parse-transcript.sh` 완성 — `~/.claude/projects/**/*.jsonl` 파싱
-- [ ] 도구 사용 집계 (Edit×4 Read×12 Bash×3)
-- [ ] 실행중인 서브에이전트 감지 (tool_use name=Agent 추적)
-- [ ] 모델별 비용 분리 (assistant 레코드의 model + usage 필드)
-- [ ] 캐시 히트율 계산 (cache_read / total_input)
-- [ ] **낭비 감지 경고**:
-  - 캐시 히트율 < 40% → 빨강 경고
-  - 컨텍스트 5분간 +10%p↑ → 🔥 경고
+- [x] `hud/lib/parse-transcript.sh` 완성
+- [x] 도구 사용 집계 (Edit×4 Read×12 Bash×3)
+- [x] 실행중인 서브에이전트 감지 (tool_use name=Agent 추적)
+- [x] 모델별 비용 분리 (assistant 레코드의 model + usage 필드)
+- [x] 캐시 히트율 계산 (cache_read / total_input)
+- [x] **낭비 감지 경고**:
   - opus에서 단순 Read 5회 연속 → haiku 권장
   - Read 결과 > 2000 tokens → Grep 추천
-- [ ] 3줄째 동적 전환 (평상시 통계 / 경고 시 액션 가이드)
-
-**구현 포인트:**
-- transcript는 `tail -500` 으로 최근만 읽기 (성능)
-- `awk`로 모델별 비용 집계 (가격표는 config.json)
-- 5초 refreshInterval 대비 100ms 이내 완료
+  - cache miss 3턴 연속 → /compact 타이밍 조정
+- [x] 3줄째 동적 전환 (평상시 통계 / 경고 시 액션 가이드)
 
 ---
 
-## Phase 3 — code-forge 강화 (L3)
+## Phase 3 — code-forge 강화 (L3) ✅ (완료, v4.2.0+)
 
 **목표:** code-forge 사용자에게 전용 메트릭 제공.
 
-- [ ] `bellows-log.sh` 확장 (별도 PR로 code-forge 본체에):
-  - `model`, `session_id`, `duration_ms`, `success` 필드 추가
-  - `agent_end` 이벤트 (SubagentStop 훅에서)
-- [ ] `quality-gate.sh` 확장:
-  - `quality.jsonl` 파일로 결과 로깅 (현재는 stderr만)
-- [ ] `hud/lib/parse-forge.sh` 완성
-- [ ] code-forge 감지 시 자동 L3 활성화
-- [ ] 3줄째에 에이전트/스킬 통계 + 게이트 통과율 표시
+- [x] `bellows-log.sh` v2 필드 (`model`, `session_id`, `duration_ms`, `success`) — code-forge 본체 반영
+- [x] `bellows-log.sh` v2.5 — `agent_end` 이벤트 (SubagentStop 훅에서 transcript ts 기반 duration 계산)
+- [x] `quality-gate.sh` → `.claude/state/quality.jsonl` 로깅 — code-forge 본체 반영
+- [x] `hud/lib/parse-forge.sh` — `bin/forge status --json` surface 경유 (계약 준수)
+- [x] code-forge 감지 시 자동 L3 활성화
+- [x] 3줄째에 에이전트/스킬 통계 + 게이트 통과율 표시
 
 ---
 
-## Phase 4 — 어댑터 패턴 (L4)
+## Phase 4 — 어댑터 패턴 (L4) ⚠️ (프레임워크 + 레퍼런스 1개)
 
 **목표:** 다른 하네스 플러그인 지원.
 
-- [ ] `hud/adapters/` 디렉토리 자동 스캔
-- [ ] `adapters/omc.sh` — oh-my-claudecode 지원
+- [x] `hud/adapters/` 디렉토리 자동 스캔 (statusline.sh)
+- [x] `adapters/omc.sh` — oh-my-claudecode 지원 (레퍼런스 어댑터)
 - [ ] `adapters/ecc.sh` — everything-claude-code 지원
 - [ ] `adapters/harness.sh` — claude-code-harness 지원
-- [ ] 어댑터 작성 가이드 (CONTRIBUTING.md)
-- [ ] statusLine 충돌 감지 및 해결 UI (/setup 시)
+- [x] 어댑터 작성 가이드 (`CONTRIBUTING.md`)
+- [x] statusLine 충돌 해결 UI — `install.sh`의 교체/래핑/취소 3택
 
 ---
 
@@ -81,21 +73,20 @@ Claude Code statusLine API에 붙는 기본 HUD.
 
 **목표:** Claude Code + Codex CLI 통합. 별도 TUI 대시보드.
 
-### 5-1. Codex CLI 데이터 파싱
+### 5-1. Codex CLI 데이터 파싱 ✅ (완료)
 
-- [ ] `hud/lib/parse-codex.sh` — `~/.codex/` 세션 JSONL 파싱
-- [ ] Codex의 `token_count` 이벤트 델타 계산 (누적합 방식)
-- [ ] 모델 자동 감지 (`turn_context.model`)
-- [ ] 비용 계산 (GPT-4.1, o3, o4-mini 가격표)
+- [x] `hud/lib/parse-codex.sh` — `~/.codex/sessions/**/*.jsonl` 파싱
+- [x] `turn.completed.usage.*` (input/cached/output_tokens) 사용 — 누적 델타 아님 (2026 Q1+ 표준)
+- [x] 모델 자동 감지 (`turn_context.model`)
+- [x] 비용 계산 (gpt-5/o3/mini/gpt-4.1 가격표 내장)
+- [x] Windows `token_count` 버그 fallback
 
-### 5-2. tmux 통합 (실시간 HUD)
+### 5-2. tmux 통합 ✅ (완료)
 
-Codex CLI는 statusLine이 없으므로, tmux 하단바로 통합 HUD 제공.
-
-- [ ] `tmux/status-right.sh` — Claude Code + Codex 통합 상태
-- [ ] 최근 활성 세션 자동 감지 (modification time 기준)
-- [ ] tmux 설정 가이드 (.tmux.conf 예시)
-- [ ] 비tmux 환경 대안 (starship, zsh prompt)
+- [x] `tmux/status-right.sh` — Claude + Codex 통합 상태
+- [x] 최근 활성 세션 자동 감지 (mtime 5분)
+- [x] tmux 설정 가이드 (`docs/tmux-setup.md`)
+- [x] 비tmux 환경 대안 (starship, zsh RPROMPT)
 
 ### 5-3. Standalone TUI 대시보드
 
@@ -141,23 +132,26 @@ Codex CLI는 statusLine이 없으므로, tmux 하단바로 통합 HUD 제공.
 
 ---
 
-## Phase 6 — 고급 기능 (장기)
+## Phase 6 — OTel / 관찰성 (L5 신설, 2026-04 리서치 반영)
 
-### 6-1. OTel 연동
+### 6-1. OTel 연동 ✅ (기본 완료, v0.2.0)
 
-- [ ] `CLAUDE_CODE_ENABLE_TELEMETRY=1` 활성화 가이드
-- [ ] OTel exporter → Grafana/Datadog 대시보드 템플릿
-- [ ] 조직 단위 집계 (Admin Analytics API)
+- [x] `parse-otel.sh` L5 레이어 — `claude_code.api_request`/`tool_result` 이벤트 소비
+- [x] L5 활성 시 L2 근사값을 정확값으로 덮어쓰기
+- [x] `docs/otel-setup.md` — Collector file exporter 가이드
+- [x] `CLAUDE_CODE_ENABLE_TELEMETRY=1` + `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1` 활성화 가이드
+- [ ] Grafana/Datadog 대시보드 템플릿 (미구현, 후속)
+- [ ] Admin Analytics API 연동 (`/v1/organizations/usage_report/claude_code`) — TUI Phase에서 구현
 
-### 6-2. 실시간 알림
+### 6-2. 실시간 알림 (미착수)
 
 - [ ] 컨텍스트 임계 초과 시 터미널 알림
 - [ ] 시간당 비용 폭증 시 Slack 알림
 - [ ] rate limit 임박 시 경고
 
-### 6-3. 플러그인 마켓플레이스 등록
+### 6-3. 배포 (미착수)
 
-- [ ] Claude Code 플러그인 마켓플레이스 제출
+- [ ] Claude Code 플러그인 마켓플레이스 제출 (공식 프로세스 현재 Anthropic 내부 관리)
 - [ ] npm 패키지 배포 (`npx forge-glow`)
 - [ ] Homebrew formula
 

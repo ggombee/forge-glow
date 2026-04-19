@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # forge-glow — parse-stdin.sh
 # L1: statusLine stdin JSON 파싱 (단일 jq 호출)
+# shellcheck disable=SC2034  # G_* 변수들은 statusline.sh가 sourcing 후 사용
 
 parse_stdin() {
   local json="$1"

@@ -84,16 +84,23 @@ bash ~/Desktop/forge-glow/uninstall.sh
 
 ## 데이터 계층
 
-forge-glow는 4단계 데이터 계층으로 동작합니다:
+forge-glow는 5단계 데이터 계층으로 동작합니다:
 
-| 계층 | 소스 | 플러그인 의존 |
-|------|------|------------|
-| **L1** | statusLine stdin JSON | 없음 (모든 사용자) |
-| **L2** | transcript.jsonl 파싱 | 없음 (모든 사용자) |
-| **L3** | code-forge usage.jsonl | code-forge 설치 시 |
-| **L4** | adapters/ | OMC, ECC 등 어댑터 추가 시 |
+| 계층 | 소스 | 플러그인 의존 | 정확도 |
+|------|------|------------|--------|
+| **L1** | statusLine stdin JSON | 없음 (모든 사용자) | 실시간 |
+| **L2** | transcript.jsonl 파싱 + 가격표 곱셈 | 없음 (모든 사용자) | 근사 |
+| **L3** | code-forge `bin/forge status --json` + usage.jsonl | code-forge 설치 시 | — |
+| **L4** | adapters/ | OMC, ECC 등 어댑터 추가 시 | — |
+| **L5** | Claude Code OTel 이벤트 (`claude_code.api_request`의 `cost_usd`) | OTel collector 실행 시 | **정확값** (Anthropic 계산) |
 
-어떤 플러그인을 쓰든 L1+L2로 핵심 HUD가 동작합니다.
+L5가 활성이면 L2 근사값을 정확값으로 덮어씁니다. L5 없으면 L2/L3 fallback.
+OTel 설정: [docs/otel-setup.md](docs/otel-setup.md)
+
+### Codex CLI 병렬 감지
+
+`~/.codex/sessions/` 활성 세션 자동 감지 → Codex model/cost/ctx/turns도 같은 statusLine에 표시.
+tmux 하단바 통합: [docs/tmux-setup.md](docs/tmux-setup.md)
 
 ## 설정
 
@@ -115,26 +122,38 @@ forge-glow는 4단계 데이터 계층으로 동작합니다:
 forge-glow/
 ├── .claude-plugin/plugin.json
 ├── hud/
-│   ├── statusline.sh          # 메인 진입점
+│   ├── statusline.sh           # 메인 진입점
 │   ├── lib/
-│   │   ├── parse-stdin.sh     # L1: stdin JSON 파싱
+│   │   ├── parse-stdin.sh      # L1: stdin JSON 파싱
 │   │   ├── parse-transcript.sh # L2: transcript 파싱
-│   │   ├── parse-forge.sh     # L3: code-forge 데이터
-│   │   └── render.sh          # 색상, 프로그레스바, 이모지
-│   ├── adapters/              # L4: 타 플러그인 어댑터
-│   └── config.json            # 임계값, 표시 설정
-├── install.sh
+│   │   ├── parse-forge.sh      # L3: code-forge (bin/forge surface 경유)
+│   │   ├── parse-otel.sh       # L5: OTel 이벤트 (opt-in, 가장 정확)
+│   │   ├── parse-codex.sh      # Codex CLI 세션 파싱
+│   │   └── render.sh           # 색상, 프로그레스바, 이모지
+│   ├── adapters/               # L4: 타 플러그인 어댑터
+│   │   └── omc.sh              # oh-my-claudecode (레퍼런스)
+│   └── config.json             # 임계값, 표시 설정
+├── tmux/
+│   └── status-right.sh         # tmux 하단바 통합 (Claude + Codex)
+├── docs/
+│   ├── otel-setup.md           # L5 OTel collector 설정
+│   └── tmux-setup.md           # tmux 통합 가이드
+├── install.sh                  # statusLine 등록 (교체/래핑/취소 3택)
 ├── uninstall.sh
+├── CONTRIBUTING.md             # 어댑터 작성 가이드
 └── README.md
 ```
 
 ## 로드맵
 
-- [x] Phase 1 — statusLine HUD MVP (L1)
-- [ ] Phase 2 — transcript 파싱 + 모델별 비용 + 캐시 히트율 (L2)
-- [ ] Phase 3 — code-forge 강화 (L3)
-- [ ] Phase 4 — 어댑터 패턴 (L4)
-- [ ] Phase 5 — 별도 TUI 대시보드 (멀티 도구 통합)
+- [x] **Phase 1** — statusLine HUD MVP (L1)
+- [x] **Phase 2** — transcript 파싱 + 모델별 비용 + 캐시 히트율 + 낭비 감지 (L2)
+- [x] **Phase 3** — code-forge 강화 (L3, bin/forge surface 경유)
+- [x] **Phase 4** — 어댑터 프레임워크 + 레퍼런스 1개 (OMC) + install.sh 래핑 모드
+- [x] **Phase 5-1/5-2** — Codex CLI 파싱 + tmux 통합
+- [ ] **Phase 5-3** — Standalone TUI (별도 마일스톤, 언어 선택 필요)
+- [x] **Phase 6-1** — OTel L5 레이어 + setup 가이드
+- [ ] **Phase 6-2/6-3** — 알림 + 마켓플레이스 (후속)
 
 ## 토큰 절약 팁
 
