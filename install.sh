@@ -83,11 +83,75 @@ UPDATED=$(jq --arg cmd "$FINAL_CMD" '.statusLine = {
 
 echo "$UPDATED" > "$SETTINGS_FILE"
 
+# ── 자동 업데이트 스케줄러 등록 (macOS launchd / Linux cron) ──
+UPDATE_SCRIPT="$GLOW_DIR/tools/self-update.sh"
+PLIST_LABEL="io.ggombee.forge-glow.update"
+PLIST_PATH="$HOME/Library/LaunchAgents/${PLIST_LABEL}.plist"
+
+register_autoupdate() {
+  if [ ! -x "$UPDATE_SCRIPT" ]; then
+    echo "⚠️  tools/self-update.sh 없음 — 자동 갱신 스킵"
+    return
+  fi
+
+  case "$(uname -s)" in
+    Darwin)
+      mkdir -p "$(dirname "$PLIST_PATH")"
+      cat > "$PLIST_PATH" <<PLIST_EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>${PLIST_LABEL}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>${UPDATE_SCRIPT}</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>FORGE_GLOW_DIR</key><string>${GLOW_DIR}</string>
+    <key>PATH</key><string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>StartInterval</key><integer>3600</integer>
+  <key>StandardErrorPath</key><string>${HOME}/.forge-glow/launchd.err.log</string>
+  <key>StandardOutPath</key><string>${HOME}/.forge-glow/launchd.out.log</string>
+</dict>
+</plist>
+PLIST_EOF
+      mkdir -p "$HOME/.forge-glow"
+      launchctl bootout "gui/$(id -u)/${PLIST_LABEL}" 2>/dev/null || true
+      if launchctl bootstrap "gui/$(id -u)" "$PLIST_PATH" 2>/dev/null; then
+        echo "✅ launchd 자동 갱신 등록 완료 (1시간 간격)"
+      else
+        echo "⚠️  launchctl 등록 실패 — 수동 실행 가능: bash $UPDATE_SCRIPT"
+      fi
+      ;;
+    Linux)
+      CRON_LINE="0 * * * * FORGE_GLOW_DIR=$GLOW_DIR /bin/bash $UPDATE_SCRIPT"
+      if command -v crontab &>/dev/null; then
+        (crontab -l 2>/dev/null | grep -v "forge-glow/tools/self-update.sh"; echo "$CRON_LINE") | crontab -
+        echo "✅ cron 자동 갱신 등록 완료 (매시 정각)"
+      else
+        echo "⚠️  crontab 없음. 수동 등록 필요:"
+        echo "   $CRON_LINE"
+      fi
+      ;;
+    *)
+      echo "⚠️  자동 갱신은 macOS/Linux만 지원. 수동 실행: bash $UPDATE_SCRIPT"
+      ;;
+  esac
+}
+
+register_autoupdate
+
 echo ""
 echo "✅ forge-glow 설치 완료 (모드: $MODE)"
 echo ""
 echo "   statusLine: $FINAL_CMD"
 echo "   refreshInterval: 5초"
+echo "   자동 갱신: 1시간 간격 (clean tree + ff-only)"
 echo ""
 if [ "$MODE" = "wrap" ]; then
   echo "   기존 statusLine과 함께 동작합니다."
