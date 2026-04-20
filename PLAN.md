@@ -152,15 +152,16 @@ Claude Code statusLine API에 붙는 기본 HUD.
 - [x] 쿨다운 중복 제어 (`FORGE_GLOW_ALERT_COOLDOWN` 기본 600초)
 - [x] update-available HUD 표시 (self-update가 dirty/로컬커밋으로 스킵 시)
 
-### 6-3. 배포 ✅ (v0.5.0 — 파이프라인 완성)
+### 6-3. 배포 파이프라인 ⚠️ (코드 완성, 실제 배포는 deferred)
 
 - [x] `Formula/forge-glow.rb` — Homebrew formula (쉘 본체 + wrapper `forge-glow` 명령)
 - [x] PyPI 배포 준비 — `stats/pyproject.toml` (name: `forge-glow-stats`)
 - [x] GitHub Release 자동화 — `.github/workflows/release.yml` (tag 푸시 시 tar.gz + sha256 업로드 + PyPI upload opt-in)
 - [x] `tools/metrics-report.sh` — 주간 사용 메트릭 리포트
-- [ ] 실제 PyPI 업로드 (토큰 secret 등록 필요 — 사용자 수동)
-- [ ] Homebrew tap 레포(`ggombee/homebrew-tap`) 생성 + formula 복사 (사용자 수동)
-- [ ] Claude Code 플러그인 마켓플레이스 제출 (현재 Anthropic 내부 관리)
+
+**실제 배포 활성화는 [docs/future-ideas.md](docs/future-ideas.md)** — 현 단계에선 git clone + install.sh로 충분.
+
+참고: OTel / Slack / Admin Analytics / 실제 PyPI·Homebrew tap 업로드 역시 모두 **opt-in 후속**.
 
 ---
 
