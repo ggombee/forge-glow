@@ -88,7 +88,7 @@ Claude Code statusLine API에 붙는 기본 HUD.
 - [x] tmux 설정 가이드 (`docs/tmux-setup.md`)
 - [x] 비tmux 환경 대안 (starship, zsh RPROMPT)
 
-### 5-3. Standalone TUI 대시보드
+### 5-3. Standalone 대시보드 ✅ (v0.5.0 — Python rich)
 
 `forge-glow stats` 명령으로 멀티 도구 통합 분석 뷰.
 
@@ -117,18 +117,18 @@ Claude Code statusLine API에 붙는 기본 HUD.
 └───────────────────────────────────────────────────────┘
 ```
 
-**구현 선택지:**
-- **Node.js + ink** (추천) — React 패턴, 빠른 개발
-- **Rust + ratatui** (tokscale처럼) — 고성능, 무거움
-- **Python + textual** — 빠른 프로토타이핑
+**구현: Python + rich** (의존성 최소 — `pip install rich requests`). textual 풀 TUI 대신 rich Live + Columns 레이아웃.
 
 **기능:**
-- [ ] 일/주/월 비용 추이
-- [ ] 모델별 사용 패턴 (히트맵)
-- [ ] 세션별 효율성 점수
-- [ ] 절약 팁 자동 생성 (rule-based)
-- [ ] JSON 내보내기 (`--json`)
-- [ ] 리더보드 (선택적, privacy-first)
+- [x] 모델별 비용/토큰 테이블 (L5 우선, L2 fallback)
+- [x] 도구 활동 집계
+- [x] code-forge 에이전트/스킬 집계 (L3)
+- [x] 절약 팁 자동 생성 (rule-based)
+- [x] JSON 내보내기 (`--json`)
+- [x] `--once` 1회 렌더 / `--refresh N` 자동 갱신
+- [x] Codex 병렬 세션 표시
+- [x] update-available 알림 통합
+- [ ] 리더보드 (후속)
 
 ---
 
@@ -141,7 +141,7 @@ Claude Code statusLine API에 붙는 기본 HUD.
 - [x] `docs/otel-setup.md` — Collector file exporter 가이드
 - [x] `CLAUDE_CODE_ENABLE_TELEMETRY=1` + `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1` 활성화 가이드
 - [x] Grafana 대시보드 템플릿 (`docs/grafana-dashboard.json` + `docs/grafana-setup.md`) — 5패널
-- [ ] Admin Analytics API 연동 (`/v1/organizations/usage_report/claude_code`) — TUI Phase에서 구현
+- [x] Admin Analytics API 연동 (`stats/.../admin.py`, `--org` 플래그) — `/v1/organizations/usage_report/claude_code`
 
 ### 6-2. 실시간 알림 ✅ (v0.4.0)
 
@@ -152,11 +152,15 @@ Claude Code statusLine API에 붙는 기본 HUD.
 - [x] 쿨다운 중복 제어 (`FORGE_GLOW_ALERT_COOLDOWN` 기본 600초)
 - [x] update-available HUD 표시 (self-update가 dirty/로컬커밋으로 스킵 시)
 
-### 6-3. 배포 (미착수)
+### 6-3. 배포 ✅ (v0.5.0 — 파이프라인 완성)
 
-- [ ] Claude Code 플러그인 마켓플레이스 제출 (공식 프로세스 현재 Anthropic 내부 관리)
-- [ ] npm 패키지 배포 (`npx forge-glow`)
-- [ ] Homebrew formula
+- [x] `Formula/forge-glow.rb` — Homebrew formula (쉘 본체 + wrapper `forge-glow` 명령)
+- [x] PyPI 배포 준비 — `stats/pyproject.toml` (name: `forge-glow-stats`)
+- [x] GitHub Release 자동화 — `.github/workflows/release.yml` (tag 푸시 시 tar.gz + sha256 업로드 + PyPI upload opt-in)
+- [x] `tools/metrics-report.sh` — 주간 사용 메트릭 리포트
+- [ ] 실제 PyPI 업로드 (토큰 secret 등록 필요 — 사용자 수동)
+- [ ] Homebrew tap 레포(`ggombee/homebrew-tap`) 생성 + formula 복사 (사용자 수동)
+- [ ] Claude Code 플러그인 마켓플레이스 제출 (현재 Anthropic 내부 관리)
 
 ---
 
