@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ShellCheck hud/
+        uses: ludeeus/action-shellcheck@2.0.0
+        with:
+          scandir: hud/
+          severity: warning
+
+      - name: ShellCheck tools/
+        uses: ludeeus/action-shellcheck@2.0.0
+        with:
+          scandir: tools/
+          severity: warning
+
+      - name: ShellCheck tmux/
+        uses: ludeeus/action-shellcheck@2.0.0
+        with:
+          scandir: tmux/
+          severity: warning
+
+      - name: ShellCheck install/uninstall
+        uses: ludeeus/action-shellcheck@2.0.0
+        with:
+          scandir: .
+          severity: warning
+          additional_files: install.sh uninstall.sh
+
+      - name: Validate JSON files
+        run: |
+          for f in .claude-plugin/plugin.json hud/config.json docs/grafana-dashboard.json; do
+            echo "Validating $f"
+            python3 -m json.tool "$f" > /dev/null || { echo "INVALID: $f"; exit 1; }
+          done
+          echo "All JSON valid"
+
+      - name: Adapter exec permission check
+        run: |
+          ERRORS=0
+          for adapter in hud/adapters/*.sh; do
+            [ -f "$adapter" ] || continue
+            if [ ! -x "$adapter" ]; then
+              echo "NOT EXECUTABLE: $adapter"
+              ERRORS=$((ERRORS+1))
+            fi
+          done
+          [ $ERRORS -eq 0 ] && echo "All adapters executable"
+          exit $ERRORS
+
+      - name: self-update dry run (no remote)
+        run: |
+          export FORGE_GLOW_DIR="$GITHUB_WORKSPACE"
+          export FORGE_GLOW_STATE_DIR="/tmp/fg-state-$$"
+          export FORGE_GLOW_UPDATE_INTERVAL=0
+          bash tools/self-update.sh
+          echo "self-update.sh exit 0 (no remote in CI = 정상 스킵)"

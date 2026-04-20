@@ -22,6 +22,8 @@ source "$SCRIPT_DIR/lib/parse-transcript.sh"
 source "$SCRIPT_DIR/lib/parse-forge.sh"
 source "$SCRIPT_DIR/lib/parse-otel.sh"
 source "$SCRIPT_DIR/lib/parse-codex.sh"
+source "$SCRIPT_DIR/lib/parse-update.sh"
+source "$SCRIPT_DIR/lib/alerts.sh"
 
 # ====== stdin JSON 읽기 ======
 STDIN_JSON=$(cat)
@@ -40,6 +42,12 @@ parse_otel
 
 # ====== Codex CLI 병렬 세션 감지 ======
 parse_codex
+
+# ====== 자동 업데이트 가용 flag ======
+parse_update
+
+# ====== 실시간 알림 감지 (Slack webhook opt-in) ======
+detect_alerts
 
 # L5 활성 시 L2 근사값을 정확값으로 덮어쓰기
 if [ "$G_OTEL_AVAILABLE" = true ]; then
@@ -137,10 +145,14 @@ if [ -d "$SCRIPT_DIR/adapters" ]; then
   done
 fi
 
-# ====== 낭비 경고 (3줄째 동적 전환) ======
-# 경고 있으면 3줄째를 경고로 교체 (통계보다 액션이 우선)
-if [ -n "$G_WASTE_WARN" ]; then
+# ====== 경고 동적 전환 (3줄째 교체) ======
+# 우선순위: G_ALERT_TEXT (임계) > G_WASTE_WARN (낭비) > G_UPDATE_AVAILABLE (업데이트)
+if [ -n "$G_ALERT_TEXT" ]; then
+  LINE3="${G_ALERT_TEXT}"
+elif [ -n "$G_WASTE_WARN" ]; then
   LINE3="💡 ${G_WASTE_WARN}"
+elif [ -n "$G_UPDATE_AVAILABLE" ]; then
+  LINE3="${G_UPDATE_AVAILABLE}"
 fi
 
 # ====== 출력 ======

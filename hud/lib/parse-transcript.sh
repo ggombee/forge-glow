@@ -6,10 +6,12 @@
 parse_transcript() {
   local transcript="$1"
 
+  # transcript 유무와 관계없이 모든 출력 변수 선제 초기화 (set -u 방어)
   G_TOOL_SUMMARY=""
   G_SUBAGENT=""
   G_MODEL_COSTS=""
   G_CACHE_HIT_PCT=""
+  G_WASTE_WARN=""
 
   [ -z "$transcript" ] || [ ! -f "$transcript" ] && return
 

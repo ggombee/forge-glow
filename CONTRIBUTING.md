@@ -51,6 +51,8 @@ echo "$OUT"
 |----------|--------|
 | code-forge | 🔨 |
 | OMC (oh-my-claudecode) | 🎭 |
+| ECC (everything-claude-code) | 🌐 |
+| claude-code-harness | ⚙️ |
 | (다음 어댑터) | — |
 
 ---

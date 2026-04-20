@@ -41,29 +41,48 @@ echo "$now" > "$STAMP"
 # ── 3. 레포 유효성 ────────────────────────────────────────
 git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
 
-# ── 4. clean tree (dirty면 스킵) ──────────────────────────
-git -C "$ROOT" diff --quiet || exit 0
-git -C "$ROOT" diff --cached --quiet || exit 0
+# dirty/로컬커밋 때문에 스킵하는 경우엔 flag 남겨서 statusLine이 알림 표시
+AVAIL_FLAG="$STATE/update-available"
+clear_flag() { rm -f "$AVAIL_FLAG" 2>/dev/null || true; }
+set_flag()   { echo "$1" > "$AVAIL_FLAG"; }
 
-# ── 5. upstream 추적 확인 (detached HEAD, upstream 미설정 스킵) ──
+DIRTY=false
+git -C "$ROOT" diff --quiet || DIRTY=true
+git -C "$ROOT" diff --cached --quiet || DIRTY=true
+
+# ── 5. upstream 추적 확인 ─────────────────────────────────
 upstream=$(git -C "$ROOT" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || true)
-[ -n "$upstream" ] || exit 0
+if [ -z "$upstream" ]; then
+  clear_flag
+  exit 0
+fi
 remote="${upstream%%/*}"
 
 # ── 6. fetch (네트워크 실패 조용히 스킵) ─────────────────
 GIT_TERMINAL_PROMPT=0 git -C "$ROOT" fetch --quiet "$remote" 2>/dev/null || exit 0
 
-# ── 7. ff-only 머지 (로컬 커밋 있으면 스킵) ──────────────
 head=$(git -C "$ROOT" rev-parse HEAD)
 tip=$(git -C "$ROOT" rev-parse "$upstream" 2>/dev/null || echo "$head")
-[ "$head" = "$tip" ] && exit 0                  # 이미 최신
 
+# 이미 최신이면 flag 제거
+if [ "$head" = "$tip" ]; then
+  clear_flag
+  exit 0
+fi
+
+# ── 7. dirty 또는 로컬커밋이면 머지 스킵 + flag 설정 ───────
 base=$(git -C "$ROOT" merge-base HEAD "$upstream" 2>/dev/null || echo "$head")
-[ "$head" = "$base" ] || exit 0                 # 로컬 커밋 → ff 불가
+if [ "$DIRTY" = true ]; then
+  set_flag "dirty"      # 사용자 작업 중 — 덮어쓰기 금지
+  exit 0
+fi
+if [ "$head" != "$base" ]; then
+  set_flag "local-commits"  # 로컬에 앞선 커밋 있음 — ff 불가
+  exit 0
+fi
 
-GIT_TERMINAL_PROMPT=0 git -C "$ROOT" merge --ff-only --quiet "$upstream" 2>/dev/null || exit 0
-
-# ── 8. 완료 로그 ──────────────────────────────────────────
-{
-  echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") updated $head -> $tip"
-} >> "$STATE/update.log"
+# ── 8. ff-only 머지 ──────────────────────────────────────
+if GIT_TERMINAL_PROMPT=0 git -C "$ROOT" merge --ff-only --quiet "$upstream" 2>/dev/null; then
+  clear_flag
+  echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") updated $head -> $tip" >> "$STATE/update.log"
+fi

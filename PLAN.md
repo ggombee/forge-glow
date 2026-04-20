@@ -56,14 +56,14 @@ Claude Code statusLine API에 붙는 기본 HUD.
 
 ---
 
-## Phase 4 — 어댑터 패턴 (L4) ⚠️ (프레임워크 + 레퍼런스 1개)
+## Phase 4 — 어댑터 패턴 (L4) ✅ (완료)
 
 **목표:** 다른 하네스 플러그인 지원.
 
 - [x] `hud/adapters/` 디렉토리 자동 스캔 (statusline.sh)
-- [x] `adapters/omc.sh` — oh-my-claudecode 지원 (레퍼런스 어댑터)
-- [ ] `adapters/ecc.sh` — everything-claude-code 지원
-- [ ] `adapters/harness.sh` — claude-code-harness 지원
+- [x] `adapters/omc.sh` — oh-my-claudecode 지원
+- [x] `adapters/ecc.sh` — everything-claude-code 지원
+- [x] `adapters/harness.sh` — claude-code-harness 지원
 - [x] 어댑터 작성 가이드 (`CONTRIBUTING.md`)
 - [x] statusLine 충돌 해결 UI — `install.sh`의 교체/래핑/취소 3택
 
@@ -140,14 +140,17 @@ Claude Code statusLine API에 붙는 기본 HUD.
 - [x] L5 활성 시 L2 근사값을 정확값으로 덮어쓰기
 - [x] `docs/otel-setup.md` — Collector file exporter 가이드
 - [x] `CLAUDE_CODE_ENABLE_TELEMETRY=1` + `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1` 활성화 가이드
-- [ ] Grafana/Datadog 대시보드 템플릿 (미구현, 후속)
+- [x] Grafana 대시보드 템플릿 (`docs/grafana-dashboard.json` + `docs/grafana-setup.md`) — 5패널
 - [ ] Admin Analytics API 연동 (`/v1/organizations/usage_report/claude_code`) — TUI Phase에서 구현
 
-### 6-2. 실시간 알림 (미착수)
+### 6-2. 실시간 알림 ✅ (v0.4.0)
 
-- [ ] 컨텍스트 임계 초과 시 터미널 알림
-- [ ] 시간당 비용 폭증 시 Slack 알림
-- [ ] rate limit 임박 시 경고
+- [x] 컨텍스트 ≥80% 경고 (statusline 3줄째 치환)
+- [x] 시간당 비용 ≥$5 경고
+- [x] rate limit ≥80% 경고
+- [x] Slack webhook opt-in (`FORGE_GLOW_SLACK_WEBHOOK` 환경변수)
+- [x] 쿨다운 중복 제어 (`FORGE_GLOW_ALERT_COOLDOWN` 기본 600초)
+- [x] update-available HUD 표시 (self-update가 dirty/로컬커밋으로 스킵 시)
 
 ### 6-3. 배포 (미착수)
 
