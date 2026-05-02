@@ -75,6 +75,26 @@ self_update
 # 자체 갱신 후 statusline.sh 경로가 갱신됐을 수 있으니 변수 다시 평가
 STATUSLINE="$PLUGIN_ROOT/hud/statusline.sh"
 
+# ─────────────────────────────────────────────────────────────
+# Windows CRLF 자동 복구
+# Windows에서 git pull 시 CRLF로 변환된 .sh가 jq stdin/shebang을 깨뜨림.
+# (증상: HUD에 모델명 '?', 컨텍스트 '0%'만 표시)
+# 이미 받아진 파일에 \r이 있으면 in-place 제거 (1회).
+# ─────────────────────────────────────────────────────────────
+if [ -f "$STATUSLINE" ] && head -1 "$STATUSLINE" 2>/dev/null | grep -q $'\r'; then
+  echo "[forge-glow] CRLF 감지 — Unix LF로 복구 중..." >&2
+  find "$PLUGIN_ROOT" \( -name '*.sh' -o -name '*.json' -o -name '*.md' \) -type f 2>/dev/null \
+    | while IFS= read -r f; do
+        # macOS BSD sed와 GNU sed 모두 호환되는 인플레이스 제거
+        if sed -i.bak 's/\r$//' "$f" 2>/dev/null; then
+          rm -f "$f.bak" 2>/dev/null
+        fi
+      done
+  # core.autocrlf를 false로 고정해 다음 pull부터 재발 방지
+  ( cd "$PLUGIN_ROOT" && git config core.autocrlf false 2>/dev/null ) || true
+  echo "[forge-glow] CRLF 복구 완료. 다음 세션부터 정상 표시." >&2
+fi
+
 # jq 필수 — 없으면 안내만 하고 종료
 if ! command -v jq >/dev/null 2>&1; then
   echo "[forge-glow] jq 미설치 — statusLine 자동 등록 스킵. 'brew install jq' 후 재실행하세요." >&2

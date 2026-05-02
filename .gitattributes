@@ -1,0 +1,21 @@
+# forge-glow는 Bash 스크립트 기반.
+# Windows에서 git pull 시 CRLF 변환되면 shebang/jq 파싱이 깨짐.
+# 모든 텍스트 파일을 LF로 강제하여 Windows/macOS/Linux 동일 동작 보장.
+
+* text=auto eol=lf
+
+# 명시적으로 LF 보장
+*.sh    text eol=lf
+*.json  text eol=lf
+*.md    text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.toml  text eol=lf
+*.py    text eol=lf
+*.rb    text eol=lf
+hooks.json text eol=lf
+
+# 바이너리는 변환 금지
+*.png   binary
+*.jpg   binary
+*.gif   binary

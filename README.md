@@ -55,8 +55,19 @@ set -g status-interval 5
 ### 요구사항
 
 - Claude Code v2.1.80+
-- `jq` (`brew install jq`)
-- `bc` (macOS 기본 포함)
+- `jq`
+  - macOS: `brew install jq`
+  - Windows: `choco install jq` 또는 `scoop install jq`
+  - Linux: `apt install jq` / `dnf install jq`
+- `bc`
+  - macOS/Linux 기본 포함
+  - Windows: Git Bash 환경에서도 동작 (없으면 시간당 비용만 미표시, 나머지 정상)
+
+### Windows 사용자 메모
+
+- **Bash 환경 필요**: Claude Code가 statusLine 명령을 Git Bash로 spawn (보통 Claude Code 설치 시 같이 셋업됨)
+- **CRLF 자동 복구**: session-init.sh가 첫 실행에서 git pull로 받아진 CRLF를 LF로 자동 변환
+- **알려진 호환 이슈**: Claude Code 자체의 statusLine Windows 회귀(예: v2.1.119)가 발생한 경우, Claude Code 안정 버전 사용 권장
 
 ### 제거
 
