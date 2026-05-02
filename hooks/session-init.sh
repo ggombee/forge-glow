@@ -2,6 +2,7 @@
 # forge-glow session-init — Claude Code 플러그인 SessionStart 훅
 #
 # 책임:
+#   0. **자체 git pull** (캐시 디렉터리에서 main을 ff-only 갱신) — 본인이 push하면 모든 사용자가 다음 세션 자동 반영
 #   1. ~/.claude/settings.json에 statusLine.command를 현재 캐시 경로로 등록·검증
 #   2. 사라진 경로(이전 버전, 청소된 /tmp 등) 자동 정리
 #   3. 기존 다른 statusLine 있으면 자동 wrap (둘 다 표시)
@@ -11,15 +12,68 @@
 #   - jq 없으면 조용히 종료 (settings 손상 방지)
 #   - mkdir 락으로 동시 세션 race 방지
 #   - 모든 변경은 stdout 안내 1줄로 사용자에게 알림
+#   - dirty tree / ff 불가 시 git pull 스킵 (사용자 작업 보호)
 
 set -uo pipefail
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+PLUGIN_JSON="$PLUGIN_ROOT/.claude-plugin/plugin.json"
 STATUSLINE="$PLUGIN_ROOT/hud/statusline.sh"
 SETTINGS="$HOME/.claude/settings.json"
 STATE="$HOME/.forge-glow"
 LOCK="$STATE/init.lock"
 MARKER="$STATE/registered-path"
+CACHE_VER="$PLUGIN_ROOT/.plugin-cache-version"
+
+# ─────────────────────────────────────────────────────────────
+# 0. 자체 git pull — code-forge 패턴과 동일
+#    캐시 디렉터리(~/.claude/plugins/cache/.../)는 .git 보유 → ff-only로 안전 갱신
+# ─────────────────────────────────────────────────────────────
+self_update() (
+  # 서브쉘 — cwd / 함수 변경이 호출자에 영향 없음
+  [ ! -d "$PLUGIN_ROOT/.git" ] && exit 0
+  cd "$PLUGIN_ROOT" || exit 0
+
+  git fetch origin --quiet 2>/dev/null || exit 0
+
+  local local_head remote_head
+  local_head=$(git rev-parse HEAD 2>/dev/null || echo "")
+  remote_head=$(git rev-parse origin/main 2>/dev/null || echo "")
+  [ -z "$local_head" ] || [ -z "$remote_head" ] && exit 0
+
+  local local_ver
+  local_ver=$(grep -o '"version": *"[^"]*"' "$PLUGIN_JSON" 2>/dev/null | head -1 | grep -o '[0-9][0-9.]*')
+
+  if [ "$local_head" = "$remote_head" ]; then
+    [ -n "$local_ver" ] && echo "$local_ver" > "$CACHE_VER" 2>/dev/null
+    exit 0
+  fi
+
+  # dirty tree 보호
+  git diff --quiet 2>/dev/null || exit 0
+  git diff --cached --quiet 2>/dev/null || exit 0
+
+  # ff-only 갱신
+  git pull origin main --ff-only --quiet 2>/dev/null || exit 0
+
+  local new_ver prev_ver
+  new_ver=$(grep -o '"version": *"[^"]*"' "$PLUGIN_JSON" 2>/dev/null | head -1 | grep -o '[0-9][0-9.]*')
+  prev_ver="${local_ver}"
+  [ -f "$CACHE_VER" ] && prev_ver=$(cat "$CACHE_VER" 2>/dev/null || echo "$local_ver")
+
+  if [ "$prev_ver" != "$new_ver" ]; then
+    echo "⚡ forge-glow updated: v${prev_ver} → v${new_ver}" >&2
+    local changes
+    changes=$(git log --oneline "${local_head}..HEAD" --no-decorate 2>/dev/null | head -3)
+    [ -n "$changes" ] && echo "Changes:" >&2 && echo "$changes" >&2
+  fi
+  echo "$new_ver" > "$CACHE_VER" 2>/dev/null
+)
+
+self_update
+
+# 자체 갱신 후 statusline.sh 경로가 갱신됐을 수 있으니 변수 다시 평가
+STATUSLINE="$PLUGIN_ROOT/hud/statusline.sh"
 
 # jq 필수 — 없으면 안내만 하고 종료
 if ! command -v jq >/dev/null 2>&1; then
