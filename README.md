@@ -65,9 +65,27 @@ set -g status-interval 5
 
 ### Windows 사용자 메모
 
-- **Bash 환경 필요**: Claude Code가 statusLine 명령을 Git Bash로 spawn (보통 Claude Code 설치 시 같이 셋업됨)
-- **CRLF 자동 복구**: session-init.sh가 첫 실행에서 git pull로 받아진 CRLF를 LF로 자동 변환
-- **알려진 호환 이슈**: Claude Code 자체의 statusLine Windows 회귀(예: v2.1.119)가 발생한 경우, Claude Code 안정 버전 사용 권장
+**필수 사전 설치**:
+```powershell
+choco install jq    # 또는 scoop install jq
+```
+jq 없으면 statusLine 모델/비용/컨텍스트 자리에 `(jq missing)` 표시.
+
+**자동으로 처리되는 것**:
+- CRLF → LF 변환 (session-init.sh가 첫 세션에서 자동)
+- 매 세션 git pull로 새 버전 자동 반영
+
+**호환성**:
+- bash 3.2+ (Git Bash 기본 포함)
+- jq 1.6+ (필수)
+- bc (Git Bash 기본 포함, 없어도 시간당 비용만 미표시)
+
+**증상별 빠른 진단**:
+| 증상 | 원인 | 해결 |
+|------|------|------|
+| `🧠 (jq missing)` | jq 미설치 | `choco install jq` |
+| `🧠 ?` + `🧊 0%` (모든 값 빈 채) | CRLF 안 풀림 또는 v0.6.0 미만 사용 중 | `claude plugin uninstall forge-glow && claude plugin install forge-glow` 1회 |
+| 브랜치만 보이고 모델/비용 안 보임 | jq stdin 파싱 실패 (구버전 eval 패턴) | v0.7.0+로 업데이트 |
 
 ### 제거
 

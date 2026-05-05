@@ -1,6 +1,6 @@
 {
   "name": "forge-glow",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Real-time efficiency HUD for Claude Code + Codex CLI — context health, cost tracking, cache hit rate. Plugin install로 statusLine 자동 등록.",
   "author": {
     "name": "ggombee"
