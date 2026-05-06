@@ -105,18 +105,42 @@ parse_stdin() {
 }
 
 # 프로젝트명 + git 브랜치 추출 (jq 의존 없음)
+#
+# 우선순위:
+#   1. CWD(현재 작업 turn의 디렉터리)에서 git toplevel 탐지 → 그 레포가 진짜 작업 대상
+#   2. 실패 시 PROJECT_DIR(claude 시작 디렉터리)에서 git toplevel 탐지
+#   3. 둘 다 git 레포 아니면 디렉터리명만 표시 (브랜치 없음)
+#
+# 효과:
+#   ~/work에서 claude 켜고 cd ~/work/repo-a 후 작업 → repo-a 정확 인식
+#   ~/work에서 claude 켜고 cd ~/work/repo-b 후 작업 → repo-b 정확 인식
+#   서브 디렉터리(~/work/repo-a/src/...)에서도 toplevel 자동 탐지
 _extract_project_and_branch() {
-  if [ -n "$G_PROJECT_DIR" ]; then
-    G_PROJECT_NAME=$(basename "$G_PROJECT_DIR")
-  elif [ -n "$G_CWD" ]; then
-    G_PROJECT_NAME=$(basename "$G_CWD" 2>/dev/null || echo "?")
-  else
-    G_PROJECT_NAME="?"
+  local repo_root=""
+
+  # 1순위: 현재 cwd에서 git toplevel
+  if [ -n "$G_CWD" ] && [ -d "$G_CWD" ]; then
+    repo_root=$(git -C "$G_CWD" rev-parse --show-toplevel 2>/dev/null)
   fi
 
-  G_BRANCH=""
-  if [ -d "${G_PROJECT_DIR:-.}/.git" ]; then
-    G_BRANCH=$(git -C "${G_PROJECT_DIR:-.}" rev-parse --abbrev-ref HEAD 2>/dev/null)
+  # 2순위: project_dir에서 git toplevel
+  if [ -z "$repo_root" ] && [ -n "$G_PROJECT_DIR" ] && [ -d "$G_PROJECT_DIR" ]; then
+    repo_root=$(git -C "$G_PROJECT_DIR" rev-parse --show-toplevel 2>/dev/null)
+  fi
+
+  if [ -n "$repo_root" ]; then
+    G_PROJECT_NAME=$(basename "$repo_root")
+    G_BRANCH=$(git -C "$repo_root" rev-parse --abbrev-ref HEAD 2>/dev/null)
+  else
+    # git 레포 아님 — 디렉터리명만 (cwd 우선, 없으면 project_dir, 그것도 없으면 ?)
+    if [ -n "$G_CWD" ]; then
+      G_PROJECT_NAME=$(basename "$G_CWD" 2>/dev/null || echo "?")
+    elif [ -n "$G_PROJECT_DIR" ]; then
+      G_PROJECT_NAME=$(basename "$G_PROJECT_DIR" 2>/dev/null || echo "?")
+    else
+      G_PROJECT_NAME="?"
+    fi
+    G_BRANCH=""
   fi
 
   G_CTX_PCT_INT=$(printf "%.0f" "${G_CTX_PCT:-0}" 2>/dev/null || echo "0")
