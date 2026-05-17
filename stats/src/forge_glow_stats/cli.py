@@ -26,7 +26,19 @@ def main(argv: list[str] | None = None) -> int:
                         help="Admin Analytics API 조직 리포트 포함 (ANTHROPIC_ADMIN_API_KEY 필요)")
     parser.add_argument("--org-days", type=int, default=14,
                         help="Org 리포트 기간(일). 기본 14")
+    wf_group = parser.add_mutually_exclusive_group()
+    wf_group.add_argument("--workflow", dest="workflow", action="store_true",
+                          help="워크플로우 패널 강제 활성 (~/.forge-glow/workflow.json 필요)")
+    wf_group.add_argument("--no-workflow", dest="workflow", action="store_false",
+                          help="워크플로우 패널 비활성")
+    parser.set_defaults(workflow=None)
     args = parser.parse_args(argv)
+
+    # include_workflow: 명시 True → 강제, 명시 False → 강제 off, None → config 존재 시 자동
+    from .workflow import build_workflow_snapshot, _resolve_config_path
+    include_workflow = args.workflow
+    if include_workflow is None:
+        include_workflow = _resolve_config_path() is not None
 
     if args.json:
         snap = build_snapshot()
@@ -52,6 +64,14 @@ def main(argv: list[str] | None = None) -> int:
                 "error": report.error,
                 "days": [asdict(d) for d in report.days],
             }
+        if include_workflow:
+            wf = build_workflow_snapshot()
+            payload["workflow"] = {
+                "available": wf.available,
+                "config_path": wf.config_path,
+                "error": wf.error,
+                "projects": [asdict(p) for p in wf.projects],
+            }
         json.dump(payload, sys.stdout, default=str, indent=2, ensure_ascii=False)
         sys.stdout.write("\n")
         return 0
@@ -63,7 +83,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"rich 패키지 필요: pip install rich\n세부: {exc}", file=sys.stderr)
             return 1
         run(refresh=args.refresh, org_days=args.org_days,
-            include_org=args.org, once=args.once)
+            include_org=args.org, once=args.once,
+            include_workflow=include_workflow)
     except Exception as exc:  # noqa: BLE001
         print(f"forge-glow-stats error: {exc}", file=sys.stderr)
         return 1

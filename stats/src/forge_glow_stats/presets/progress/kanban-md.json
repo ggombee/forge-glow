@@ -1,0 +1,22 @@
+{
+  "$schema": "../../schema/progress-preset.schema.json",
+  "name": "kanban-md",
+  "description": "TODO / DOING / DONE 섹션의 bullet list 기반 칸반 markdown.",
+  "selectors": {
+    "pending_urgent": {
+      "section": "^##\\s*(DOING|In Progress)",
+      "format": "bullet"
+    },
+    "pending_hold": {
+      "section": "^##\\s*(TODO|Backlog)",
+      "format": "bullet"
+    },
+    "decisions": {
+      "section": "^##\\s*(DONE|Completed)",
+      "format": "bullet"
+    },
+    "lastUpdated": {
+      "regex": "(?:Last updated|Updated)\\s*:\\s*([^\\n]+)"
+    }
+  }
+}

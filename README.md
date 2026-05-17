@@ -5,7 +5,7 @@
 Claude Code 실시간 효율성 HUD. 컨텍스트 건강도, 비용, 캐시 효율, 토큰 낭비를 터미널 하단에 표시합니다.
 
 ```
-🧠 Opus  📁 ad-center/feature/ggombee  💰 $2.41 ($0.83/h)
+🧠 Opus  📁 myproject/feature/branch  💰 $2.41 ($0.83/h)
 🧊 23% [████░░░░░░░░░░░░░░░░]  📝 +156 -23  🔧 Edit×4 Read×12
 📊 opus:$1.80 sonnet:$0.52 haiku:$0.09  cache:87%  ⏱ 5h:12% 7d:41%
 ```
@@ -41,7 +41,23 @@ forge-glow-stats               # rich 자동 갱신 대시보드
 forge-glow-stats --once        # 1회 렌더
 forge-glow-stats --json        # JSON 출력
 forge-glow-stats --org         # Admin Analytics API (ANTHROPIC_ADMIN_API_KEY 필요)
+forge-glow-stats --workflow    # 워크플로우 패널 강제 활성 (~/.forge-glow/workflow.json 필요)
 ```
+
+### Workflow 패널 (Phase 7, 선택)
+
+작업 컨텍스트(현재/다음 sub-task, 결정 누적, 빌드 히스토리, 미결정 Q)를 효율성 메트릭 옆에서 함께 표시합니다.
+
+```bash
+# config 작성 (예시 복사 후 수정)
+mkdir -p ~/.forge-glow
+cp $(python3 -c "import forge_glow_stats, pathlib; print(pathlib.Path(forge_glow_stats.__file__).parent / 'examples' / 'workflow.example.json')") ~/.forge-glow/workflow.json
+$EDITOR ~/.forge-glow/workflow.json
+
+forge-glow-stats           # config 존재 시 자동 활성
+```
+
+자세한 schema/preset 가이드는 [`docs/workflow-setup.md`](docs/workflow-setup.md).
 
 ### tmux 통합 (선택)
 

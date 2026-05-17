@@ -47,3 +47,6 @@ where = ["src"]
 
 [tool.setuptools.package-dir]
 "" = "src"
+
+[tool.setuptools.package-data]
+forge_glow_stats = ["presets/progress/*.json"]

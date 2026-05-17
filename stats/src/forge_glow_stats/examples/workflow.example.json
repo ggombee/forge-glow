@@ -1,0 +1,62 @@
+{
+  "_comment": "워크플로우 sources v2 예시. ~/.forge-glow/workflow.json 위치에 자신의 데이터로 복사하여 사용.",
+  "version": 2,
+  "trackers": {
+    "main-jira": {
+      "type": "jira",
+      "host": "example.atlassian.net",
+      "browseUrl": "https://example.atlassian.net/browse/{id}"
+    },
+    "gh-issues": {
+      "type": "github-issues",
+      "repo": "octocat/hello-world",
+      "browseUrl": "https://github.com/octocat/hello-world/issues/{id}"
+    }
+  },
+  "projects": [
+    {
+      "id": "demo-project",
+      "displayName": "Demo Project",
+      "path": "~/code/demo-project",
+      "trackerRef": "main-jira",
+      "epic": {
+        "id": "EXAMPLE-100",
+        "title": "Demo epic — feature rollout"
+      },
+      "items": [
+        {
+          "id": "EXAMPLE-101",
+          "title": "Analysis + policy",
+          "status": "done",
+          "kind": "current",
+          "commits": 12
+        },
+        {
+          "id": "EXAMPLE-102",
+          "title": "Implementation + integration",
+          "status": "in_progress",
+          "kind": "next"
+        },
+        {
+          "id": "EXAMPLE-103",
+          "title": "QA + deploy",
+          "status": "ready",
+          "kind": "next",
+          "dependsOn": "EXAMPLE-102"
+        }
+      ],
+      "progress": {
+        "file": "docs/progress.md",
+        "preset": "decision-log"
+      },
+      "sources": {
+        "buildReportsDir": "e2e/reports",
+        "policyDocsDirs": [".policy/docs"]
+      },
+      "links": {
+        "design": "https://www.figma.com/file/xxxx",
+        "repo": "https://github.com/octocat/hello-world"
+      }
+    }
+  ]
+}

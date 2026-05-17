@@ -165,6 +165,45 @@ Claude Code statusLine API에 붙는 기본 HUD.
 
 ---
 
+## Phase 7 — 워크플로우 통합 (작업 흐름 + 하네싱) 🚧 (진행 중)
+
+**목표:** 효율성 메트릭과 작업 컨텍스트(현재 sub-task, 결정 누적, 빌드 히스토리, 미결정 Q)를 한 화면에 통합. "지금 어떤 작업을 어떤 모델로 얼마 들여 어떤 도구 chain으로 진행 중이고, 다음은 뭔지" 단일 진입점.
+
+### 7-1. 워크플로우 패널 ✅ (코드 완성)
+
+- [x] `stats/src/forge_glow_stats/workflow.py` — config loader + 셀렉터 파서 + WorkflowSnapshot
+- [x] `dashboard.py`에 `_workflow_panel` 추가 — 현재/다음 items + 미결정 Q + 결정 누적 + 빌드 + 브랜치
+- [x] tracker-agnostic 데이터 모델 (`jira` / `github-issues` / `linear` / `custom`)
+- [x] Config 자동 감지: `$WORKFLOW_CONFIG_PATH` → `~/.forge-glow/workflow.json`
+- [x] CLI: `--workflow` / `--no-workflow` 플래그 + `--json` 통합
+
+### 7-2. progress 문서 셀렉터 + 프리셋 ✅ (코드 완성)
+
+- [x] `presets/progress/decision-log.json` — D-log + 미결정 Q 표 형식
+- [x] `presets/progress/simple-todo.json` — `- [ ]` 체크박스
+- [x] `presets/progress/kanban-md.json` — TODO/DOING/DONE bullet
+- [x] 사용자 정의 셀렉터 (`progress.selectors` — section regex + format: `table` | `checkbox` | `bullet`)
+- [x] placeholder row 자동 스킵 (`(없음)` / `—` / `N/A`)
+
+### 7-3. statusLine 워크플로우 표시 (후속)
+
+- [ ] 3줄째 또는 2줄째 일부에 현재 sub-task ID/title 표시
+- [ ] config: `~/.forge-glow/workflow.json` 의 `items[kind=current]` 자동 추출
+
+### 7-4. 자매 도구 호환 ✅
+
+- [x] markdown 출력 Node CLI(별도 도구)와 동일 sources v2 schema 공유
+- [x] 사용자 가이드 (`docs/workflow-setup.md`)
+- [ ] schema JSON Schema 문서 + Python/Node fixture 정합성 테스트
+
+### 7-5. 데이터 절연
+
+- [x] 회사/내부 식별자는 코드/예시/README에 0건 (사용자 `~/.forge-glow/workflow.json`에만 존재)
+- [x] 예시 데이터(`examples/workflow.example.json`)는 `EXAMPLE-*`, `octocat/hello-world`만 사용
+- [x] 회사 키워드 grep 검증 통과
+
+---
+
 ## 기술 스택 결정 사항
 
 | 영역 | 선택 | 이유 |

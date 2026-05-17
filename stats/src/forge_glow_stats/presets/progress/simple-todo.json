@@ -1,0 +1,25 @@
+{
+  "$schema": "../../schema/progress-preset.schema.json",
+  "name": "simple-todo",
+  "description": "GitHub-style `- [ ]` / `- [x]` 체크박스 기반 progress 문서.",
+  "selectors": {
+    "pending_urgent": {
+      "section": "^##\\s*(In Progress|Doing|진행 중)",
+      "format": "checkbox",
+      "stateFilter": "open"
+    },
+    "pending_hold": {
+      "section": "^##\\s*(Todo|TODO|To Do|대기|Backlog)",
+      "format": "checkbox",
+      "stateFilter": "open"
+    },
+    "decisions": {
+      "section": "^##\\s*(Done|Completed|완료)",
+      "format": "checkbox",
+      "stateFilter": "checked"
+    },
+    "lastUpdated": {
+      "regex": "(?:Last updated|Updated|마지막 업데이트)\\s*:\\s*([^\\n]+)"
+    }
+  }
+}

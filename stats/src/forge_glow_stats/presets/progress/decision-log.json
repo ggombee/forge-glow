@@ -1,0 +1,31 @@
+{
+  "$schema": "../../schema/progress-preset.schema.json",
+  "name": "decision-log",
+  "description": "결정 누적 + 미결정 Q + last-updated 헤더가 있는 markdown progress 문서. 표 기반.",
+  "selectors": {
+    "pending_urgent": {
+      "section": "^### .*🔴",
+      "format": "table",
+      "idColumn": 0,
+      "titleColumn": 1,
+      "extraColumns": { "decider": 2, "tempDirection": 3, "affected": 4 }
+    },
+    "pending_hold": {
+      "section": "^### .*🟡",
+      "format": "table",
+      "idColumn": 0,
+      "titleColumn": 1,
+      "extraColumns": { "decider": 2, "tempDirection": 3, "affected": 4 }
+    },
+    "decisions": {
+      "section": "^## \\d+\\.\\s*(사용자 결정|Decisions)",
+      "format": "table",
+      "idColumn": 0,
+      "titleColumn": 1,
+      "idPattern": "^D\\d+"
+    },
+    "lastUpdated": {
+      "regex": "(?:마지막 업데이트|Last updated)\\s*:\\s*([^)]+)\\)"
+    }
+  }
+}
