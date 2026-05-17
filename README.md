@@ -292,6 +292,18 @@ forge-glow가 보여주는 지표를 활용한 절약 방법:
 - **Read보다 Grep** — 불필요한 컨텍스트 적재 방지
 - **5분 이내 /compact** — 캐시 TTL(5분) 만료 전 실행
 
+## Integration
+
+forge-glow는 단독으로도 동작하지만, 자매 도구들과 결합 시 더 풍부한 정보를 제공합니다.
+
+| 자매 도구 | 접점 | 효과 |
+|---|---|---|
+| [code-forge](https://github.com/ggombee/code-forge) | `bin/forge status --json` (L3 surface) + `.claude/state/quality.jsonl` | 에이전트/스킬 사용, REFLECT flag, scope 위반 등을 HUD 3줄차에 자동 표시 |
+| [flow-toolkit](https://github.com/ggombee/flow-toolkit) | `flow run report` 결과 → `.policy/runs/<cycle>/result.json` | 사이클 통과율·영향 TC 결과를 워크플로우 패널에서 확인 |
+| [forge-hearth](https://github.com/ggombee/forge-hearth) | 동일 `sources.json` v2 schema 공유 (`~/.forge-glow/workflow.json`) | `forge-glow-stats --workflow` 패널에서 다중 프로젝트 progress를 같은 위치에서 |
+
+전체 데이터 계약은 본인 PC `code-forge/docs/contracts/INTEGRATION.md` 참고.
+
 ## License
 
 MIT
