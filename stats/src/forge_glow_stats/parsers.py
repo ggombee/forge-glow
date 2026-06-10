@@ -196,16 +196,25 @@ def parse_codex(codex_home: Path | None = None) -> tuple[bool, str | None, float
         return False, None, 0.0
     recent.sort(key=lambda p: p.stat().st_mtime, reverse=True)
     latest = recent[0]
+    # 검증된 on-disk 스키마(event-schema.md §3): 모델은 turn_context.payload.model,
+    # usage 는 payload.type=="token_count" 의 payload.info.total_token_usage (누적 — 마지막 1건만, 합산 X).
+    # ⚠ 과거의 turn.completed / ev["model"] 스키마는 디스크에 존재하지 않아 항상 0이었음.
     model = None
-    inp = cached = out = 0
+    last_usage: dict | None = None
     for ev in _iter_jsonl(latest, limit=500):
-        if ev.get("type") == "turn_context" and ev.get("model"):
-            model = ev["model"]
-        if ev.get("type") == "turn.completed":
-            u = ev.get("usage", {}) or {}
-            inp += int(u.get("input_tokens", 0) or 0)
-            cached += int(u.get("cached_input_tokens", 0) or 0)
-            out += int(u.get("output_tokens", 0) or 0)
+        if ev.get("type") == "turn_context":
+            m = (ev.get("payload") or {}).get("model")
+            if m:
+                model = m
+        payload = ev.get("payload") or {}
+        if payload.get("type") == "token_count":
+            ttu = (payload.get("info") or {}).get("total_token_usage")
+            if ttu:
+                last_usage = ttu
+    u = last_usage or {}
+    inp = int(u.get("input_tokens", 0) or 0)
+    cached = int(u.get("cached_input_tokens", 0) or 0)
+    out = int(u.get("output_tokens", 0) or 0)
     key = short_model(model or "")
     p = PRICES_USD_PER_MTOK.get(key, PRICES_USD_PER_MTOK["gpt-4.1"])
     cost = (inp * p["input"] + out * p["output"] + cached * p["cache_read"]) / 1_000_000

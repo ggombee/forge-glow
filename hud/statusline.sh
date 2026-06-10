@@ -41,7 +41,9 @@ parse_forge "$G_SESSION_ID"
 parse_otel
 
 # ====== Codex CLI 병렬 세션 감지 ======
-parse_codex
+# 스파인 가드: Codex 파서 결함이 Codex 패널만 비우고 HUD 전체 렌더를 중단시키지 않도록.
+# (parse_codex 는 G_CODEX_* 를 진입 즉시 초기화 + 모든 외부호출 2>/dev/null → set -u abort 불가)
+parse_codex || true
 
 # ====== 자동 업데이트 가용 flag ======
 parse_update
