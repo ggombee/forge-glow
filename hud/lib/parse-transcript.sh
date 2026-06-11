@@ -86,14 +86,16 @@ parse_transcript() {
     result=$(echo "$model_data" | awk '
     {
       m=$1; inp=$2; out=$3; cr=$4; cc=$5
-      # 모델별 가격 ($/MTok)
-      if (m ~ /opus/)       { ip=5; op=25; crp=0.5; ccp=6.25 }
+      # 모델별 가격 ($/MTok) — fable이 opus보다 먼저 (id에 둘 다 안 들어가지만 신규 티어 우선 원칙)
+      if (m ~ /fable/)      { ip=10; op=50; crp=1; ccp=12.5 }
+      else if (m ~ /opus/)  { ip=5; op=25; crp=0.5; ccp=6.25 }
       else if (m ~ /haiku/) { ip=1; op=5; crp=0.1; ccp=1.25 }
       else                  { ip=3; op=15; crp=0.3; ccp=3.75 }
 
       # 짧은 모델명
       short=m
-      if (m ~ /opus/) short="opus"
+      if (m ~ /fable/) short="fable"
+      else if (m ~ /opus/) short="opus"
       else if (m ~ /sonnet/) short="sonnet"
       else if (m ~ /haiku/) short="haiku"
 

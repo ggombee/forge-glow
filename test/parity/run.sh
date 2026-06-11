@@ -25,6 +25,8 @@ MODE="${1:-check}"
 TMP_CODEX="$(mktemp -d)"
 mkdir -p "$TMP_CODEX/sessions"
 mkdir -p /tmp/forge-parity
+# transcript 픽스처(.jsonl)는 stdin 픽스처가 /tmp/forge-parity 절대경로로 참조 — 고정 위치로 스테이징
+cp "$FIX"/*.jsonl /tmp/forge-parity/ 2>/dev/null || true
 trap 'rm -rf "$TMP_CODEX"' EXIT
 
 mkdir -p "$GOLD"

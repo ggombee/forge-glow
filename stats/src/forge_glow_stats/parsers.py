@@ -15,6 +15,7 @@ from typing import Iterable
 # 2026-04 기준 가격표 ($/MTok). 실제 정확값은 L5(OTel)가 cost_usd를 직접 제공하므로
 # L2 fallback 용도.
 PRICES_USD_PER_MTOK: dict[str, dict[str, float]] = {
+    "fable":  {"input": 10.0, "output": 50.0, "cache_read": 1.0,  "cache_write": 12.5},
     "opus":   {"input": 5.0,  "output": 25.0, "cache_read": 0.5,  "cache_write": 6.25},
     "sonnet": {"input": 3.0,  "output": 15.0, "cache_read": 0.3,  "cache_write": 3.75},
     "haiku":  {"input": 1.0,  "output": 5.0,  "cache_read": 0.1,  "cache_write": 1.25},
@@ -29,7 +30,7 @@ PRICES_USD_PER_MTOK: dict[str, dict[str, float]] = {
 def short_model(name: str) -> str:
     """모델 id/display에서 대표 키워드 추출."""
     n = (name or "").lower()
-    for key in ("opus", "sonnet", "haiku", "gpt-5", "gpt-4.1", "o3", "mini"):
+    for key in ("fable", "opus", "sonnet", "haiku", "gpt-5", "gpt-4.1", "o3", "mini"):
         if key in n:
             return key
     return "unknown"
