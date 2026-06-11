@@ -40,16 +40,12 @@ parse_forge() {
   status_json=$("$forge_bin" status --json 2>/dev/null)
   [ -z "$status_json" ] && return
 
-  # schema_version forward-compat guard (2026-05-19 redesign G5)
-  # bin/forge가 v2 등 신 schema 응답 시 v1 전용 필드 매핑이 깨지지 않도록 silent fallback.
-  # 계약: code-forge/docs/contracts/state-schema.md §외부 도구 연동 규약
-  #       "모르는 type/필드는 무시 (forward-compat)"
-  local schema_ver
-  schema_ver=$(echo "$status_json" | jq -r '.schema_version // "1"' 2>/dev/null)
-  if [ "$schema_ver" != "1" ]; then
-    # 신 schema — 호환 어댑터 미구현. 조용히 fallback (L2 transcript만 사용).
-    return
-  fi
+  # schema_version forward-compat — PRESENCE-TOLERANT (2026-06-12 수리, 구 G5 가드 교체)
+  # 구버전은 version≠"1"이면 조기 return → 버전 범프 시 패널 전체가 어두워지는 지뢰였음
+  # (overhaul "spine landmine"). 이제 버전과 무관하게 아는 필드만 // 기본값으로 읽는다 —
+  # 필드가 사라지면 해당 패널만 빈 값(렌더는 if [ -n ] 가드가 처리), 전체는 절대 안 죽음.
+  # 계약: state-schema.md §외부 도구 연동 규약 "모르는 type/필드는 무시 (forward-compat)"
+  # 메이저 버전은 로그 없이 통과 — 어차피 아래 jq가 전부 // 기본값 + 2>/dev/null.
 
   # quality 집계 — 모든 세션 누적. 현재 세션만 필터는 bin/forge가 아직 미지원.
   local pass fail total
