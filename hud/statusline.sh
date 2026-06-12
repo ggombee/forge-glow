@@ -70,6 +70,11 @@ elif [ -n "$G_SUBAGENT" ]; then
   LINE1="🧠 ${G_MODEL} → 🔍 ${G_SUBAGENT} 실행중"
 else
   LINE1="🧠 ${G_MODEL}"
+  # FORGE_GLOW_VERSION_TAG=1: route.json model_version(verbatim, 표시 전용 — event-schema §5)을 병기 — 기본 off
+  # 메인 모델 단독 표시일 때만 — 에이전트 실행 표시 뒤에 붙으면 서브에이전트 버전으로 오독됨
+  if [ "${FORGE_GLOW_VERSION_TAG:-0}" = "1" ] && [ -n "${G_ROUTE_VERSION:-}" ]; then
+    LINE1+=" (${G_ROUTE_VERSION})"
+  fi
 fi
 
 # 프로젝트/브랜치
@@ -140,6 +145,14 @@ if [ "$G_FORGE_AVAILABLE" = true ]; then
   fi
 fi
 
+# FORGE_GLOW_SHOW_EFFORT=1: /start 복잡도→effort 권고 표시 (route.json, 권고 전용) — 기본 off
+# gate/rate 토큰과 동일 패턴으로 조립 — 경고가 3줄째를 교체해도 보존
+EFFORT_TOKEN=""
+if [ "${FORGE_GLOW_SHOW_EFFORT:-0}" = "1" ] && [ -n "${G_ROUTE_EFFORT:-}" ]; then
+  EFFORT_TOKEN="🎚 ${G_ROUTE_COMPLEXITY:+${G_ROUTE_COMPLEXITY}→}${G_ROUTE_EFFORT}"
+  LINE3+="  ${EFFORT_TOKEN}"
+fi
+
 # Rate limit (토큰으로 조립 — 경고가 3줄째를 교체해도 보존하기 위해, gate 토큰과 동일 패턴)
 RATE_5H=$(rate_limit_display "$G_RATE_5H" "5h")
 RATE_7D=$(rate_limit_display "$G_RATE_7D" "7d")
@@ -184,6 +197,9 @@ if [ -n "$RATE_TOKEN" ] && [[ "$LINE3" != *"$RATE_TOKEN"* ]]; then
 fi
 if [ -n "$GATE_TOKEN" ] && [[ "$LINE3" != *"$GATE_TOKEN"* ]]; then
   LINE3+="  ${GATE_TOKEN}"
+fi
+if [ -n "$EFFORT_TOKEN" ] && [[ "$LINE3" != *"$EFFORT_TOKEN"* ]]; then
+  LINE3+="  ${EFFORT_TOKEN}"
 fi
 
 # ====== 출력 ======
