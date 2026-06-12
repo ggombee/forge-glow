@@ -158,6 +158,8 @@ claude plugin uninstall forge-glow
 | cache:N% | 캐시 히트율. 70%+ 초록, 40~70% 노랑, 40% 미만 빨강 |
 | ⏱ rate limit | 5시간/7일 사용률. 60%+ ⚠️, 80%+ 🔴 |
 | 🔨 에이전트/스킬 | code-forge 설치 시 에이전트/스킬 사용 통계 자동 표시 |
+| gate:✅/❌/⏭ | 이번 턴 품질 게이트 결과 (`FORGE_GLOW_GATE_LAST=1` — §표시 토글) |
+| 🎚 HIGH→xhigh | /start 복잡도→effort 권고 (`FORGE_GLOW_SHOW_EFFORT=1` — §표시 토글) |
 
 ## 컨텍스트 경고 시스템
 
@@ -204,6 +206,23 @@ tmux 하단바 통합: [docs/tmux-setup.md](docs/tmux-setup.md)
   }
 }
 ```
+
+### 표시 토글 (환경변수)
+
+Claude Code `settings.json`의 `env`에 넣으면 HUD에 바로 반영됩니다:
+
+| 변수 | 기본 | 효과 |
+|------|------|------|
+| `FORGE_GLOW_COST=0` | `1` (표시) | 비용 표시 전체 off (1줄 💸 + 3줄 모델별 📊). 구독제(Max)에선 API 환산 참고치일 뿐이라 끄고 ⏱ rate limit을 실질 게이지로 쓰는 용도. 종량제는 기본값 유지 권장 |
+| `FORGE_GLOW_GATE_LAST=1` | `0` | 3줄에 "이번 턴 품질 게이트" 표시 — `gate:✅` / `gate:❌(blocks)` / `gate:⏭`. code-forge `route.json`의 `last_gate` 소비 |
+| `FORGE_GLOW_VERSION_TAG=1` | `0` | 1줄 모델명에 정확한 model id 병기 — 예: `🧠 Fable 5 (claude-fable-5[1m])`. 서브에이전트 실행 표시 중엔 오독 방지를 위해 생략 |
+| `FORGE_GLOW_SHOW_EFFORT=1` | `0` | 3줄에 /start 복잡도→effort 권고 표시 — 예: `🎚 HIGH→xhigh`. code-forge `route.json`의 `complexity`/`effort_level` 소비 (권고 전용 — 적용은 사용자가 /effort로) |
+
+```json
+{ "env": { "FORGE_GLOW_COST": "0", "FORGE_GLOW_GATE_LAST": "1" } }
+```
+
+게이트/버전/effort 토큰은 3줄이 경고로 교체돼도 보존됩니다. code-forge 미설치 환경에선 해당 토큰이 조용히 비표시 — 켜두어도 무해합니다.
 
 ## 구조
 
