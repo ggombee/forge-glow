@@ -295,8 +295,8 @@ bash ~/Desktop/workspace/forge-glow/uninstall.sh
 - [x] **Phase 3** — code-forge 강화 (L3, bin/forge surface 경유)
 - [x] **Phase 4** — 어댑터 프레임워크 + 레퍼런스 1개 (OMC) + install.sh 래핑 모드
 - [x] **Phase 5-1/5-2** — Codex CLI 파싱 + tmux 통합
-- [ ] **Phase 5-3** — Standalone TUI (별도 마일스톤, 언어 선택 필요)
 - [x] **Phase 5-3** — Python rich 대시보드 (`forge-glow-stats`)
+- ~~Standalone TUI / Node 렌더러 재작성~~ — 취소 (2026-06, 단일 플랫폼 사용자에게 과한 장식 — 2nd platform 사용자 실존 시 부활)
 - [x] **Phase 6-1** — OTel L5 레이어 + Grafana 템플릿 + Admin Analytics API
 - [x] **Phase 6-2** — 실시간 알림 (컨텍스트/비용/rate limit) + Slack webhook opt-in + update-available HUD
 - [x] **Phase 6-3** — Homebrew formula + PyPI 패키지 + GitHub Release 자동화 + `tools/metrics-report.sh`
@@ -315,11 +315,13 @@ forge-glow가 보여주는 지표를 활용한 절약 방법:
 
 forge-glow는 단독으로도 동작하지만, 자매 도구들과 결합 시 더 풍부한 정보를 제공합니다.
 
-| 자매 도구 | 접점 | 효과 |
-|---|---|---|
-| [code-forge](https://github.com/ggombee/code-forge) | `bin/forge status --json` (L3 surface) + `.claude/state/quality.jsonl` | 에이전트/스킬 사용, REFLECT flag, scope 위반 등을 HUD 3줄차에 자동 표시 |
-| [flow-toolkit](https://github.com/ggombee/flow-toolkit) | `flow run report` 결과 → `.policy/runs/<cycle>/result.json` | 사이클 통과율·영향 TC 결과를 워크플로우 패널에서 확인 |
-| [forge-hearth](https://github.com/ggombee/forge-hearth) | 동일 `sources.json` v2 schema 공유 (`~/.forge-glow/workflow.json`) | `forge-glow-stats --workflow` 패널에서 다중 프로젝트 progress를 같은 위치에서 |
+| 자매 도구 | 상태 | 접점 | 효과 |
+|---|---|---|---|
+| [code-forge](https://github.com/ggombee/code-forge) | 🟢 wired | `bin/forge status --json` (L3 surface) + `.claude/state/quality.jsonl` | 에이전트/스킬 사용, 품질 게이트, REFLECT flag, effort 권고를 HUD 3줄차에 자동 표시 |
+| flow-toolkit | 📐 designed (휴면) | `flow run report` 결과 → `.policy/runs/<cycle>/result.json` | 사이클 통과율·영향 TC 결과를 워크플로우 패널에서 확인 (flow CLI 활성 시) |
+| forge-hearth | 📐 designed (휴면) | 동일 `sources.json` v2 schema 공유 (`~/.forge-glow/workflow.json`) | `forge-glow-stats --workflow` 패널에서 다중 프로젝트 progress를 같은 위치에서 |
+
+🟢 = 오늘 실제 연결되어 동작 / 📐 = 계약·코드는 준비, 해당 도구가 휴면이라 데이터 생산 0 (연결 자체는 graceful — 없으면 조용히 비표시)
 
 전체 데이터 계약은 본인 PC `code-forge/docs/contracts/INTEGRATION.md` 참고.
 
