@@ -77,11 +77,15 @@ LINE1+="  📁 ${G_PROJECT_NAME}"
 [ -n "$G_BRANCH" ] && LINE1+="/${G_BRANCH}"
 
 # 비용 (stdin 원값은 소수 10자리+ — 표시만 둘째 자리 반올림, 계산엔 원값 유지)
-COST_ICON=$(cost_indicator "$G_COST_PER_HOUR")
-COST_FMT=$(printf "%.2f" "$G_COST" 2>/dev/null || echo "$G_COST")
-LINE1+="  ${COST_ICON} \$${COST_FMT}"
-if [ "$G_COST_PER_HOUR" != "0" ] && [ -n "$G_COST_PER_HOUR" ]; then
-  LINE1+=" (\$${G_COST_PER_HOUR}/h)"
+# FORGE_GLOW_COST=0 → 비용 표시 전체 off (구독제 사용자는 API 환산 참고치일 뿐 —
+# 실질 게이지는 ⏱ rate limit. 기본은 on: 종량제 사용자에겐 실비)
+if [ "${FORGE_GLOW_COST:-1}" != "0" ]; then
+  COST_ICON=$(cost_indicator "$G_COST_PER_HOUR")
+  COST_FMT=$(printf "%.2f" "$G_COST" 2>/dev/null || echo "$G_COST")
+  LINE1+="  ${COST_ICON} \$${COST_FMT}"
+  if [ "$G_COST_PER_HOUR" != "0" ] && [ -n "$G_COST_PER_HOUR" ]; then
+    LINE1+=" (\$${G_COST_PER_HOUR}/h)"
+  fi
 fi
 
 # ====== 2줄째: 컨텍스트 바 + 코드 변경 + 도구/캐시 ======
@@ -103,8 +107,8 @@ fi
 # ====== 3줄째: 모델별 비용 + 캐시 + rate limit + forge 메트릭 ======
 LINE3=""
 
-# 모델별 비용 분리 (L2)
-if [ -n "$G_MODEL_COSTS" ]; then
+# 모델별 비용 분리 (L2) — FORGE_GLOW_COST=0이면 함께 off
+if [ -n "$G_MODEL_COSTS" ] && [ "${FORGE_GLOW_COST:-1}" != "0" ]; then
   LINE3+="📊 ${G_MODEL_COSTS}"
 fi
 
