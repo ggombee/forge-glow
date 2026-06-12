@@ -35,7 +35,10 @@ fail=0
 for f in "$FIX"/*.json; do
   [ -f "$f" ] || continue
   name="$(basename "$f" .json)"
-  out="$(CODEX_HOME="$TMP_CODEX" CLAUDE_CODE_ENABLE_TELEMETRY=0 bash "$HUD" < "$f" 2>/dev/null)"
+  # CODE_FORGE_BIN=/usr/bin/true → 실행 가능하지만 status --json 출력이 비어 forge 패널 결정적 off
+  #   (캐시의 실제 bin/forge가 살아있는 프로젝트의 route.json을 읽어오는 누수 차단 — 2026-06-12 발견)
+  # FORGE_GLOW_GATE_LAST=0 → Claude 세션 settings.json env(=1)가 셸에 주입돼도 flags-off 보장
+  out="$(CODEX_HOME="$TMP_CODEX" CLAUDE_CODE_ENABLE_TELEMETRY=0 CODE_FORGE_BIN=/usr/bin/true FORGE_GLOW_GATE_LAST=0 bash "$HUD" < "$f" 2>/dev/null)"
   if [ "$MODE" = "update" ]; then
     printf '%s\n' "$out" > "$GOLD/$name.txt"
     echo "updated golden: $name"

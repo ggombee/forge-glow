@@ -136,12 +136,14 @@ if [ "$G_FORGE_AVAILABLE" = true ]; then
   fi
 fi
 
-# Rate limit
+# Rate limit (토큰으로 조립 — 경고가 3줄째를 교체해도 보존하기 위해, gate 토큰과 동일 패턴)
 RATE_5H=$(rate_limit_display "$G_RATE_5H" "5h")
 RATE_7D=$(rate_limit_display "$G_RATE_7D" "7d")
+RATE_TOKEN=""
 if [ -n "$RATE_5H" ] || [ -n "$RATE_7D" ]; then
-  LINE3+="  ⏱ ${RATE_5H}"
-  [ -n "$RATE_7D" ] && LINE3+=" ${RATE_7D}"
+  RATE_TOKEN="⏱ ${RATE_5H}"
+  [ -n "$RATE_7D" ] && RATE_TOKEN+=" ${RATE_7D}"
+  LINE3+="  ${RATE_TOKEN}"
 fi
 
 # Codex 활성 세션 표시 (병렬 작업 중일 때)
@@ -172,7 +174,10 @@ elif [ -n "$G_WASTE_WARN" ]; then
 elif [ -n "$G_UPDATE_AVAILABLE" ]; then
   LINE3="${G_UPDATE_AVAILABLE}"
 fi
-# 경고가 3줄째를 교체해도 "이번 턴 검증" 토큰은 보존 (플래그 off면 빈 문자열 — 출력 무변화)
+# 경고가 3줄째를 교체해도 "이번 턴 검증"·rate limit 토큰은 보존 (없으면 빈 문자열 — 출력 무변화)
+if [ -n "$RATE_TOKEN" ] && [[ "$LINE3" != *"$RATE_TOKEN"* ]]; then
+  LINE3+="  ${RATE_TOKEN}"
+fi
 if [ -n "$GATE_TOKEN" ] && [[ "$LINE3" != *"$GATE_TOKEN"* ]]; then
   LINE3+="  ${GATE_TOKEN}"
 fi

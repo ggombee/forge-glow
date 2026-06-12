@@ -26,22 +26,11 @@ detect_alerts() {
     alerts+=("ctx:${G_CTX_PCT_INT}% auto-compact 임박 → /handoff")
   fi
 
-  # 시간당 비용 폭증 (5달러 이상 = 🚨)
-  if [ -n "${G_COST_PER_HOUR:-}" ] && [ "$(awk -v c="$G_COST_PER_HOUR" 'BEGIN{print (c>=5)?1:0}' 2>/dev/null)" = "1" ]; then
-    alerts+=("cost:\$${G_COST_PER_HOUR}/h 폭증")
-  fi
-
-  # Rate limit 임박 (80% 이상)
-  for pair in "5h:${G_RATE_5H:-}" "7d:${G_RATE_7D:-}"; do
-    local label="${pair%%:*}"
-    local pct="${pair#*:}"
-    [ -z "$pct" ] || [ "$pct" = "null" ] && continue
-    local rounded
-    rounded=$(printf "%.0f" "$pct" 2>/dev/null || echo 0)
-    if [ "$rounded" -ge 80 ] 2>/dev/null; then
-      alerts+=("rate:${label}=${rounded}% 임박")
-    fi
-  done
+  # cost/rate 경고는 제거 (2026-06-12 사용자 결정 — HUD 중복):
+  #  - cost: LINE1 비용 아이콘이 $5/h 이상에서 🚨로 자체 에스컬레이션 + ($X/h) 숫자 상시 표시
+  #  - rate: LINE3 ⏱ 표시가 60%↑ ⚠️ / 80%↑ 🔴로 자체 에스컬레이션
+  #  경고의 LINE3 전체 교체가 ⏱ 5h/7d를 영구히 가리던 부작용도 함께 해소 (statusline.sh 보존 로직 참조).
+  #  부수효과: cost/rate는 Slack 전파 대상에서도 빠짐 (ctx 경고만 전파 — opt-in webhook).
 
   [ "${#alerts[@]}" -eq 0 ] && return
 
