@@ -13,6 +13,7 @@ parse_forge() {
   G_FORGE_SKILLS=""
   G_FORGE_GATE=""
   G_FORGE_AVAILABLE=false
+  G_FORGE_STATUS_JSON=""
 
   # ── 1. bin/forge 탐색 ──────────────────────────────────────
   # code-forge 설치된 플러그인 캐시에서 bin/forge를 찾는다.
@@ -39,6 +40,8 @@ parse_forge() {
   local status_json
   status_json=$("$forge_bin" status --json 2>/dev/null)
   [ -z "$status_json" ] && return
+  # parse-routing.sh가 재사용 — forge 이중 호출 방지 (2026-06-12)
+  G_FORGE_STATUS_JSON="$status_json"
 
   # schema_version forward-compat — PRESENCE-TOLERANT (2026-06-12 수리, 구 G5 가드 교체)
   # 구버전은 version≠"1"이면 조기 return → 버전 범프 시 패널 전체가 어두워지는 지뢰였음

@@ -23,7 +23,7 @@ detect_alerts() {
 
   # 컨텍스트 임계 (80% 이상 = 💀)
   if [ -n "${G_CTX_PCT_INT:-}" ] && [ "$G_CTX_PCT_INT" -ge 80 ] 2>/dev/null; then
-    alerts+=("ctx:${G_CTX_PCT_INT}% auto-compact 임박")
+    alerts+=("ctx:${G_CTX_PCT_INT}% auto-compact 임박 → /handoff")
   fi
 
   # 시간당 비용 폭증 (5달러 이상 = 🚨)

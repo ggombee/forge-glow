@@ -20,6 +20,7 @@ source "$SCRIPT_DIR/lib/render.sh"
 source "$SCRIPT_DIR/lib/parse-stdin.sh"
 source "$SCRIPT_DIR/lib/parse-transcript.sh"
 source "$SCRIPT_DIR/lib/parse-forge.sh"
+source "$SCRIPT_DIR/lib/parse-routing.sh"
 source "$SCRIPT_DIR/lib/parse-otel.sh"
 source "$SCRIPT_DIR/lib/parse-codex.sh"
 source "$SCRIPT_DIR/lib/parse-update.sh"
@@ -36,6 +37,8 @@ parse_transcript "$G_TRANSCRIPT"
 
 # ====== L3: code-forge 파싱 ======
 parse_forge "$G_SESSION_ID"
+# L3.5: route.json 스냅샷 (parse_forge가 공유한 JSON 재사용 — 추가 호출 없음)
+parse_routing
 
 # ====== L5: OTel 파싱 (opt-in, 가장 정확) ======
 parse_otel
@@ -111,11 +114,23 @@ if [ -n "$G_CACHE_HIT_PCT" ] && [ "$G_CACHE_HIT_PCT" != "0" ]; then
 fi
 
 # code-forge 에이전트/스킬/게이트 (L3)
+GATE_TOKEN=""
 if [ "$G_FORGE_AVAILABLE" = true ]; then
   if [ -n "$G_FORGE_AGENTS" ] || [ -n "$G_FORGE_SKILLS" ]; then
     LINE3+="  🔨 ${G_FORGE_AGENTS}${G_FORGE_SKILLS}"
   fi
-  if [ -n "$G_FORGE_GATE" ]; then
+  # FORGE_GLOW_GATE_LAST=1: 누적 카운트 대신 "이번 턴 검증" 1건 표시 (route.json last_gate)
+  if [ "${FORGE_GLOW_GATE_LAST:-0}" = "1" ] && [ -n "${G_ROUTE_GATE_STATUS:-}" ]; then
+    case "$G_ROUTE_GATE_STATUS" in
+      pass)    GATE_TOKEN="gate:✅" ;;
+      fail)    GATE_TOKEN="gate:❌${G_ROUTE_GATE_BLOCKS:+(${G_ROUTE_GATE_BLOCKS})}" ;;
+      skipped) GATE_TOKEN="gate:⏭" ;;
+      *)       GATE_TOKEN="gate:${G_ROUTE_GATE_STATUS}" ;;
+    esac
+  fi
+  if [ -n "$GATE_TOKEN" ]; then
+    LINE3+="  ${GATE_TOKEN}"
+  elif [ -n "$G_FORGE_GATE" ]; then
     LINE3+="  ✅ ${G_FORGE_GATE}"
   fi
 fi
@@ -155,6 +170,10 @@ elif [ -n "$G_WASTE_WARN" ]; then
   LINE3="💡 ${G_WASTE_WARN}"
 elif [ -n "$G_UPDATE_AVAILABLE" ]; then
   LINE3="${G_UPDATE_AVAILABLE}"
+fi
+# 경고가 3줄째를 교체해도 "이번 턴 검증" 토큰은 보존 (플래그 off면 빈 문자열 — 출력 무변화)
+if [ -n "$GATE_TOKEN" ] && [[ "$LINE3" != *"$GATE_TOKEN"* ]]; then
+  LINE3+="  ${GATE_TOKEN}"
 fi
 
 # ====== 출력 ======
