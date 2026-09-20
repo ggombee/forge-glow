@@ -1,0 +1,3 @@
+{"type":"assistant","message":{"id":"pricing-opus-legacy","model":"claude-opus-4-1-20250805","content":[],"usage":{"input_tokens":1000000,"output_tokens":1000000}}}
+{"type":"assistant","message":{"id":"pricing-sonnet-5","model":"claude-sonnet-5","content":[],"usage":{"input_tokens":1000000,"output_tokens":1000000}}}
+{"type":"assistant","message":{"id":"pricing-haiku-legacy","model":"claude-haiku-3-5-20241022","content":[],"usage":{"input_tokens":1000000,"output_tokens":1000000}}}

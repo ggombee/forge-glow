@@ -2,328 +2,258 @@
 
 > "대장장이는 불빛 색으로 철의 상태를 읽는다"
 
-Claude Code 실시간 효율성 HUD. 컨텍스트 건강도, 비용, 캐시 효율, 토큰 낭비를 터미널 하단에 표시합니다.
+Claude Code의 **현재 세션만** 표시하는 실시간 status line입니다. Codex **CLI TUI**는
+forge-glow가 전역 로그를 추측하지 않고 Codex native status line을 사용합니다.
 
-```
-🧠 Opus  📁 myproject/feature/branch  💰 $2.41 ($0.83/h)
+```text
+🧠 Opus  📁 myproject/feature  💰 ~$2.41 (~$0.83/h avg)
 🧊 23% [████░░░░░░░░░░░░░░░░]  📝 +156 -23  🔧 Edit×4 Read×12
-📊 opus:$1.80 sonnet:$0.52 haiku:$0.09  cache:87%  ⏱ 5h:12% 7d:41%
+📊 ~opus:$1.80 sonnet:$0.52  cache:87%  ⏱ 5h:12% 7d:41%
 ```
+
+## 세션 격리 원칙
+
+- Claude: statusLine stdin의 `session_id`, `transcript_path`, context만 사용
+- Claude OTel: 현재 `session.id`와 같은 이벤트만 사용
+- Codex: 현재 TUI 세션을 아는 native `tui.status_line` 사용
+- 5시간/주간 한도는 세션별이 아니라 각 계정의 공유 값
+
+Claude HUD에 `~/.codex/sessions` 값을 합치지 않으므로 동시에 여러
+Claude/Codex 세션을 열어도 모델과 컨텍스트가 섞이지 않습니다.
 
 ## 설치
 
-### ✅ 권장: Claude Code 플러그인 (한 줄, 자동 갱신)
+### Claude Code 플러그인
 
 ```bash
-# 마켓플레이스 등록 (최초 1회)
-claude plugin marketplace add https://github.com/ggombee/forge-market.git
-
-# 설치
-claude plugin install forge-glow
+claude plugin marketplace add ggombee/forge-glow
+claude plugin install forge-glow@forge-glow
 ```
 
-다음 Claude Code 세션부터 statusLine이 **자동 등록**됩니다 (별도 setup 불필요). 매 세션 시작 시 마켓플레이스가 git pull로 **자동 갱신**.
+다음 Claude 세션에서 status line을 등록합니다. 이미 다른 status line이 있으면
+자동으로 합치거나 덮어쓰지 않고 안내만 표시합니다. 명시적으로
+교체하려면 클론한 디렉터리에서 `bash install.sh`를 실행하세요. 두 HUD를
+한 status line에 합치는 모드는 제공하지 않습니다.
 
-### 개발자 / Codex 단독 사용자: git clone
+서드파티 마켓플레이스의 자동 업데이트는 기본으로 꺼져 있습니다. Claude Code의
+`/plugin` → `Marketplaces` → `forge-glow`에서 auto-update를 켜거나 사용자
+`settings.json`의 해당 항목에 `"autoUpdate": true`를 추가하세요. 새 버전이
+받아진 실행 중 세션은 `/reload-plugins`로 다시 로드합니다.
 
-플러그인 외 부가 기능(tmux 통합, Python 대시보드)은 어떤 설치 경로에서든 동일하게 작동합니다. 코드 수정·기여를 원하면:
+### Codex CLI
+
+```bash
+codex plugin marketplace add ggombee/forge-glow --ref main
+codex plugin add forge-glow@forge-glow
+```
+
+새 Codex 세션에서 `$forge-glow-statusline`을 실행하거나 `/statusline`에서 다음
+항목을 선택합니다.
+
+> 이 설정은 터미널에서 실행한 Codex CLI의 TUI footer에만 표시됩니다.
+> Codex 데스크톱 앱, IDE 확장, API/Orca 같은 비-TTY 호스트에는
+> `tui.status_line`을 삽입할 footer가 없으므로 forge-glow HUD가 나타나지 않습니다.
+
+- `model-with-reasoning`
+- `context-remaining`
+- `five-hour-limit`
+- `weekly-limit`
+- `current-dir`
+- `git-branch`
+- `fast-mode`
+
+이 순서로 모델과 현재 세션 컨텍스트 바로 뒤에 5시간·7일 한도를 붙입니다.
+Codex가 계정에서 특정 한도를 받지 못하면 그 항목은 자동으로 생략합니다. 기간
+라벨은 Codex native footer가 정하므로 현재 버전에서 주간 한도가 `weekly`로
+표시될 수 있으며, `tui.status_line`에는 이를 `7d`로 바꾸는 alias 설정이 없습니다.
+
+직접 설정하는 방법과 세션/계정 범위는 [Codex 세션별 HUD 설정](docs/codex-setup.md)을
+참조하세요.
+
+### 업데이트
+
+Claude는 auto-update를 켜 두면 시작할 때 새 버전을 확인합니다. 즉시 확인하려면:
+
+```bash
+claude plugin marketplace update forge-glow
+claude plugin update forge-glow@forge-glow
+```
+
+Codex는 현재 마켓플레이스 자동 갱신을 제공하지 않으므로 명시적으로 snapshot을
+갱신하고 플러그인을 다시 설치한 뒤 새 세션을 엽니다.
+
+```bash
+codex plugin marketplace upgrade forge-glow
+codex plugin add forge-glow@forge-glow
+```
+
+클론 안에서는 두 제품을 한 번에 설치·업데이트·진단할 수 있습니다.
+
+```bash
+bash tools/plugin-manager.sh install all
+bash tools/plugin-manager.sh update all
+bash tools/plugin-manager.sh check all
+```
+
+배포 방식과 버전 반영 시점은 [플러그인 배포와 업데이트](docs/plugin-distribution.md)를
+참조하세요.
+
+### 개발용 클론
 
 ```bash
 git clone https://github.com/ggombee/forge-glow.git ~/work/forge-glow
-# 본인 설정 후 push → 모든 플러그인 사용자 캐시가 자동 갱신
+cd ~/work/forge-glow
+bash install.sh
 ```
 
-### Python 대시보드만 (선택)
+개발용 Git clone에서만 clean tree를 ff-only로 갱신하는 1시간 스케줄러를
+등록합니다. 원치 않으면 설치할 때 `FORGE_GLOW_SKIP_AUTOUPDATE=1 bash install.sh`를
+사용하세요. 플러그인과 Homebrew 설치본은 각 패키지 관리자가 업데이트합니다.
 
-```bash
-pip install forge-glow-stats   # 또는 stats/에서 직접 PYTHONPATH=src python3 -m forge_glow_stats
-forge-glow-stats               # rich 자동 갱신 대시보드
-forge-glow-stats --once        # 1회 렌더
-forge-glow-stats --json        # JSON 출력
-forge-glow-stats --org         # Admin Analytics API (ANTHROPIC_ADMIN_API_KEY 필요)
-forge-glow-stats --workflow    # 워크플로우 패널 강제 활성 (~/.forge-glow/workflow.json 필요)
-```
-
-### Workflow 패널 (Phase 7, 선택)
-
-작업 컨텍스트(현재/다음 sub-task, 결정 누적, 빌드 히스토리, 미결정 Q)를 효율성 메트릭 옆에서 함께 표시합니다.
-
-```bash
-# config 작성 (예시 복사 후 수정)
-mkdir -p ~/.forge-glow
-cp $(python3 -c "import forge_glow_stats, pathlib; print(pathlib.Path(forge_glow_stats.__file__).parent / 'examples' / 'workflow.example.json')") ~/.forge-glow/workflow.json
-$EDITOR ~/.forge-glow/workflow.json
-
-forge-glow-stats           # config 존재 시 자동 활성
-```
-
-자세한 schema/preset 가이드는 [`docs/workflow-setup.md`](docs/workflow-setup.md).
-
-### tmux 통합 (선택)
-
-`~/.tmux.conf`에 추가 (플러그인 설치 후):
-```tmux
-set -g status-right "#($CLAUDE_PLUGIN_ROOT_FORGE_GLOW/tmux/status-right.sh)"
-set -g status-interval 5
-```
-또는 절대 경로 직접 입력. 자세한 건 `docs/tmux-setup.md`.
-
-### 요구사항
-
-- Claude Code v2.1.80+
-- `jq`
-  - macOS: `brew install jq`
-  - Windows: `choco install jq` 또는 `scoop install jq`
-  - Linux: `apt install jq` / `dnf install jq`
-- `bc`
-  - macOS/Linux 기본 포함
-  - Windows: Git Bash 환경에서도 동작 (없으면 시간당 비용만 미표시, 나머지 정상)
-
-### Windows 사용자 메모
-
-**필수 사전 설치**:
-```powershell
-choco install jq    # 또는 scoop install jq
-```
-jq 없으면 statusLine 모델/비용/컨텍스트 자리에 `(jq missing)` 표시.
-
-**자동으로 처리되는 것**:
-- CRLF → LF 변환 (session-init.sh가 첫 세션에서 자동)
-- 매 세션 git pull로 새 버전 자동 반영
-
-**호환성**:
-- bash 3.2+ (Git Bash 기본 포함)
-- jq 1.6+ (필수)
-- bc (Git Bash 기본 포함, 없어도 시간당 비용만 미표시)
-
-**증상별 빠른 진단**:
-| 증상 | 원인 | 해결 |
-|------|------|------|
-| `🧠 (jq missing)` | jq 미설치 | `choco install jq` |
-| `🧠 ?` + `🧊 0%` (모든 값 빈 채) | CRLF 안 풀림 또는 v0.6.0 미만 사용 중 | `claude plugin uninstall forge-glow && claude plugin install forge-glow` 1회 |
-| 브랜치만 보이고 모델/비용 안 보임 | jq stdin 파싱 실패 (구버전 eval 패턴) | v0.7.0+ 자동 반영 또는 위 reinstall |
-| 부모 디렉터리에서 작업 중인데 다른 레포의 브랜치가 표시됨 | 멀티 레포 워크스페이스 인식 | v0.8.0+ 자동 반영 (cwd 기준 git toplevel 자동 탐지) |
-
-**한 줄 자동 진단** (이 한 줄만 실행하면 위 표 전부 자동 체크):
-
-```bash
-# Windows Git Bash / macOS / Linux 모두 동일
-bash ~/.claude/plugins/cache/forge-market/forge-glow/*/tools/diagnose.sh
-```
-
-출력의 `✗`/`⚠` 메시지에 해결 명령이 포함됩니다. 모르겠으면 출력 그대로 복사해 GitHub Issue로.
-
-### 제거
-
-```bash
-claude plugin uninstall forge-glow
-# 다음 세션 시작 시 session-init.sh가 settings.json의 statusLine을 자동 정리
-```
+마켓플레이스의 `forge-glow`와 개발용 클론을 동시에 활성화하면 다음 Claude 시작 때
+캐시 hook이 status line 경로를 되돌릴 수 있습니다. installer 경고가 나오면 개발 중에는
+해당 `forge-glow@...` 플러그인만 비활성화하고, 배포본 업데이트 뒤 다시 활성화하세요.
 
 ## HUD 구성
 
-### 1줄: 세션 정보
+### 1줄: 세션 신원과 비용
 
+```text
+🧠 Opus  📁 project/branch  💰 ~$2.41 (~$0.83/h avg)
 ```
-🧠 Opus  📁 프로젝트/브랜치  💰 비용 (시간당)
-```
 
-| 항목 | 설명 |
-|------|------|
-| 🧠 모델명 | 현재 세션 모델. 서브에이전트 실행 시 `→ 🔍 scout(haiku) 실행중` 표시 |
-| 📁 프로젝트/브랜치 | 현재 작업 디렉토리 + Git 브랜치 |
-| 💰/💸/🚨 비용 | 세션 누적 비용 + 시간당 비용. $2/h 이상 💸, $5/h 이상 🚨 |
+- 모델, 현재 작업 레포/브랜치
+- Claude가 stdin으로 준 세션 누적 비용 추정값
+- 세션 시작 후 wall-clock 평균 추정값이 $2/h, $5/h를 넘으면 💸, 🚨로 변경
 
-### 2줄: 컨텍스트 + 활동
+Claude Pro/Max 구독자에게 비용은 실제 청구액이 아니므로 `FORGE_GLOW_COST=0`으로
+숨기고 rate limit을 보는 편이 낫습니다.
 
-```
+### 2줄: 컨텍스트와 최근 활동
+
+```text
 🧊 23% [████░░░░░░░░░░░░░░░░]  📝 +156 -23  🔧 Edit×4 Read×12
 ```
 
-| 항목 | 설명 |
-|------|------|
-| 컨텍스트 바 | 20칸 프로그레스 바. 색상으로 건강도 표시 |
-| 📝 코드 변경 | 추가/삭제된 라인 수 |
-| 🔧 도구 활동 | 세션 내 도구 사용 집계 (transcript 파싱) |
+- 현재 세션의 context 사용률
+- 세션 코드 추가/삭제량
+- 현재 transcript 최근 500개 레코드의 nested `tool_use` 집계
+- Claude Code가 준 `COLUMNS`가 100 미만이면 바를 10칸, 도구를 상위 3개로 축소
 
-### 3줄: 효율성 메트릭 (선택)
+컨텍스트 표시는 0~49% 🧊, 50~69% ⚠️, 70~79% 🔥, 80% 이상 💀로
+올라갑니다. 이 임계값은 경고 표시용이며 모델 품질을 보장하는 절대 기준은 아닙니다.
 
+### 3줄: 효율 추정
+
+```text
+📊 ~opus:$1.80 sonnet:$0.52  cache:87%  ⏱ 5h:12% 7d:41%
 ```
-📊 opus:$1.80 sonnet:$0.52  cache:87%  ⏱ 5h:12% 7d:41%
-```
 
-| 항목 | 설명 |
-|------|------|
-| 📊 모델별 비용 | transcript에서 모델별 토큰 비용 분리 집계 |
-| cache:N% | 캐시 히트율. 70%+ 초록, 40~70% 노랑, 40% 미만 빨강 |
-| ⏱ rate limit | 5시간/7일 사용률. 60%+ ⚠️, 80%+ 🔴 |
-| 🔨 에이전트/스킬 | code-forge 설치 시 에이전트/스킬 사용 통계 자동 표시 |
-| gate:✅/❌/⏭ | 이번 턴 품질 게이트 결과 (`FORGE_GLOW_GATE_LAST=1` — §표시 토글) |
-| 🎚 HIGH→xhigh | /start 복잡도→effort 권고 (`FORGE_GLOW_SHOW_EFFORT=1` — §표시 토글) |
+- `~`가 붙은 모델별 비용은 청구 확정값이 아닙니다.
+- transcript는 `message.id`로 반복 레코드를 중복 제거한 뒤 현재 가격표로 근사합니다.
+- OTel을 켜면 현재 `session.id`의 `cost_usd` 이벤트로 모델별 근사값을 보강합니다.
+- rate limit은 Claude가 statusLine stdin으로 준 값입니다.
 
-## 컨텍스트 경고 시스템
+## 데이터 소스
 
-불빛 색이 변하듯, 컨텍스트 사용률에 따라 이모지와 바 색상이 변합니다:
+| 소스 | 용도 | 범위 |
+|---|---|---|
+| Claude statusLine stdin | 모델, context, 총비용, rate limit, 코드 변경 | 현재 세션 |
+| `transcript_path` | 도구, 모델별 토큰/비용 근사, 캐시 | 현재 세션 |
+| OTel logs file | 모델별 `cost_usd`, 캐시 | 현재 `session.id` |
 
-| 사용률 | 상태 | 의미 |
-|--------|------|------|
-| 🧊 0~50% | 안전 (초록) | 성능 저하 없음 |
-| ⚠️ 50~70% | 주의 (노랑) | Context Rot 시작 — 중간 정보 정확도 30%+ 하락 |
-| 🔥 70~80% | 위험 (주황) | 품질 저하 가속. `/clear` 또는 `/compact` 권장 |
-| 💀 80~83.5% | 임계 (빨강) | auto-compact 임박. 복잡한 작업 중단 |
-| ♻️ 83.5%+ | 압축중 | auto-compact 자동 트리거 |
-
-## 데이터 계층
-
-forge-glow는 5단계 데이터 계층으로 동작합니다:
-
-| 계층 | 소스 | 플러그인 의존 | 정확도 |
-|------|------|------------|--------|
-| **L1** | statusLine stdin JSON | 없음 (모든 사용자) | 실시간 |
-| **L2** | transcript.jsonl 파싱 + 가격표 곱셈 | 없음 (모든 사용자) | 근사 |
-| **L3** | code-forge `bin/forge status --json` + usage.jsonl | code-forge 설치 시 | — |
-| **L4** | adapters/ | OMC, ECC 등 어댑터 추가 시 | — |
-| **L5** | Claude Code OTel 이벤트 (`claude_code.api_request`의 `cost_usd`) | OTel collector 실행 시 | **정확값** (Anthropic 계산) |
-
-L5가 활성이면 L2 근사값을 정확값으로 덮어씁니다. L5 없으면 L2/L3 fallback.
-OTel 설정: [docs/otel-setup.md](docs/otel-setup.md)
-
-### Codex CLI 병렬 감지
-
-`~/.codex/sessions/` 활성 세션 자동 감지 → Codex model/cost/ctx/turns도 같은 statusLine에 표시.
-tmux 하단바 통합: [docs/tmux-setup.md](docs/tmux-setup.md)
+OTel은 기본으로 꺼져 있습니다. 표준 OTLP/JSON `resourceLogs/scopeLogs/logRecords`
+파일 설정은 [OTel 설정](docs/otel-setup.md)을 보세요.
 
 ## 설정
 
-`hud/config.json`에서 임계값과 표시 요소를 커스텀할 수 있습니다:
+Claude `settings.json` 예시:
 
 ```json
 {
-  "thresholds": {
-    "context": { "caution": 50, "danger": 70, "critical": 80 },
-    "cost_per_hour": { "caution": 2.0, "danger": 5.0 },
-    "rate_limit": { "caution": 60, "danger": 80 }
+  "env": {
+    "FORGE_GLOW_COST": "0"
   }
 }
 ```
 
-### 표시 토글 (환경변수)
-
-Claude Code `settings.json`의 `env`에 넣으면 HUD에 바로 반영됩니다:
-
 | 변수 | 기본 | 효과 |
-|------|------|------|
-| `FORGE_GLOW_COST=0` | `1` (표시) | 비용 표시 전체 off (1줄 💸 + 3줄 모델별 📊). 구독제(Max)에선 API 환산 참고치일 뿐이라 끄고 ⏱ rate limit을 실질 게이지로 쓰는 용도. 종량제는 기본값 유지 권장 |
-| `FORGE_GLOW_GATE_LAST=1` | `0` | 3줄에 "이번 턴 품질 게이트" 표시 — `gate:✅` / `gate:❌(blocks)` / `gate:⏭`. code-forge `route.json`의 `last_gate` 소비 |
-| `FORGE_GLOW_VERSION_TAG=1` | `0` | 1줄 모델명에 정확한 model id 병기 — 예: `🧠 Fable 5 (claude-fable-5[1m])`. 서브에이전트 실행 표시 중엔 오독 방지를 위해 생략 |
-| `FORGE_GLOW_SHOW_EFFORT=1` | `0` | 3줄에 /start 복잡도→effort 권고 표시 — 예: `🎚 HIGH→xhigh`. code-forge `route.json`의 `complexity`/`effort_level` 소비 (권고 전용 — 적용은 사용자가 /effort로) |
+|---|---:|---|
+| `FORGE_GLOW_COST` | `1` | `0`이면 1/3줄 비용 표시 숨김 |
+| `FORGE_GLOW_OTEL_LOG` | `~/.forge-glow/otel.log` | OTel logs file 경로 |
+| `FORGE_GLOW_SLACK_WEBHOOK` | 빈 값 | context 임계 경고를 Slack으로 전송 |
+| `FORGE_GLOW_ALERT_COOLDOWN` | `600` | 같은 Claude 세션의 Slack 재전송 최소 간격(초) |
 
-```json
-{ "env": { "FORGE_GLOW_COST": "0", "FORGE_GLOW_GATE_LAST": "1" } }
+## 선택 도구
+
+### tmux Codex 계정 배지와 전역 활동 요약
+
+`tmux/status-right.sh`는 launcher가 현재 pane에 기록한 Codex 계정을
+`👤 codex:개인` 또는 `👤 codex:회사`로 표시합니다. 계정 연동이 없으면 최근
+5분 내 Claude/Codex 활동 **여부만** 표시합니다. 모델·비용·context는 넣지 않습니다.
+설정은 [tmux 가이드](docs/tmux-setup.md)를 참조하세요.
+
+### Python 집계 대시보드
+
+```bash
+PYTHONPATH=stats/src python3 -m forge_glow_stats --once
+PYTHONPATH=stats/src python3 -m forge_glow_stats --json
 ```
 
-게이트/버전/effort 토큰은 3줄이 경고로 교체돼도 보존됩니다. code-forge 미설치 환경에선 해당 토큰이 조용히 비표시 — 켜두어도 무해합니다.
+이 대시보드는 최근 로컬 Claude 로그를 합산하는 **분석 뷰**이며 세션 HUD가
+아닙니다. `~/.forge-glow/workflow.json`이 있으면 workflow 패널도 보여줍니다.
+
+## 요구사항과 진단
+
+- Claude Code v2.1.153+ (그 이전 버전도 동작하지만 폭 자동 조절 없음)
+- Bash 3.2+
+- `jq` 필수
+- `bc` 선택: 없으면 시간당 비용만 생략
+
+```bash
+bash tools/diagnose.sh
+bash test/parity/run.sh
+```
+
+## 제거
+
+플러그인으로 설치했다면 먼저 Claude Code에서 HUD 설정을 비운 뒤 제거합니다.
+
+```bash
+# Claude Code 안에서 실행
+/statusline clear
+
+# 셸에서 실행
+claude plugin uninstall forge-glow@forge-glow
+```
+
+개발용 클론이나 Homebrew의 `forge-glow install`로 직접 등록했다면:
+
+```bash
+bash uninstall.sh
+```
+
+`uninstall.sh`는 현재 `statusLine.command`가 forge-glow 소유일 때만 제거하며,
+교체 설치에서 보관한 기존 status line이 있으면 복원합니다.
 
 ## 구조
 
+```text
+hud/statusline.sh              Claude HUD 진입점
+hud/lib/parse-stdin.sh         현재 statusLine stdin
+hud/lib/parse-transcript.sh    현재 transcript, message.id 중복 제거
+hud/lib/parse-otel.sh          session.id 격리 OTLP/JSON
+.claude-plugin/marketplace.json Claude 직접 marketplace
+.agents/plugins/marketplace.json Codex 저장소 marketplace
+plugins/forge-glow/            Codex plugin과 status-line 설정 skill
+docs/codex-setup.md            Codex native status line
+tools/plugin-manager.sh        두 제품의 설치·업데이트·상태 확인
+tools/check-release.sh         배포 버전·경로 동기화 검사
+tmux/status-right.sh           pane별 Codex 계정과 전역 활동 여부 표시
+stats/                         Claude 로컬 집계 대시보드
+test/parity/run.sh             렌더/스키마/세션 격리 회귀 테스트
+test/install/run.sh            설치/제거/플러그인 훅 설정 보존 테스트
 ```
-forge-glow/
-├── .claude-plugin/plugin.json
-├── hud/
-│   ├── statusline.sh           # 메인 진입점
-│   ├── lib/
-│   │   ├── parse-stdin.sh      # L1: stdin JSON 파싱
-│   │   ├── parse-transcript.sh # L2: transcript 파싱
-│   │   ├── parse-forge.sh      # L3: code-forge (bin/forge surface 경유)
-│   │   ├── parse-otel.sh       # L5: OTel 이벤트 (opt-in, 가장 정확)
-│   │   ├── parse-codex.sh      # Codex CLI 세션 파싱
-│   │   └── render.sh           # 색상, 프로그레스바, 이모지
-│   ├── adapters/               # L4: 타 플러그인 어댑터
-│   │   └── omc.sh              # oh-my-claudecode (레퍼런스)
-│   └── config.json             # 임계값, 표시 설정
-├── tmux/
-│   └── status-right.sh         # tmux 하단바 통합 (Claude + Codex)
-├── docs/
-│   ├── otel-setup.md           # L5 OTel collector 설정
-│   └── tmux-setup.md           # tmux 통합 가이드
-├── install.sh                  # statusLine 등록 (교체/래핑/취소 3택)
-├── uninstall.sh
-├── CONTRIBUTING.md             # 어댑터 작성 가이드
-└── README.md
-```
-
-## 자동 업데이트
-
-`tools/self-update.sh`가 스케줄러에서 1시간마다 실행되어 `git pull --ff-only`합니다.
-**Claude Code 플러그인화 없이** 멀티모델 철학을 유지하면서 자동 갱신되는 구조.
-
-| 안전 가드 | 동작 |
-|-----------|------|
-| clean tree | `git diff`가 더러우면 스킵 (사용자 작업 보호) |
-| upstream tracking | `@{u}` 없거나 detached HEAD면 스킵 |
-| fast-forward only | 로컬에 커밋 있으면 스킵 (강제 rebase 없음) |
-| mkdir 락 | 동시 실행 방지 |
-| network failure | 조용히 스킵 (다음 주기 재시도) |
-
-### 커스터마이즈
-
-```bash
-export FORGE_GLOW_UPDATE_INTERVAL=7200   # 2시간 (기본 3600초)
-export FORGE_GLOW_DIR=/custom/path       # 레포 경로 변경
-export FORGE_GLOW_STATE_DIR=~/.my-state  # 상태 파일 경로
-```
-
-### 수동 실행
-
-```bash
-bash ~/Desktop/workspace/forge-glow/tools/self-update.sh
-cat ~/.forge-glow/update.log   # 갱신 이력
-```
-
-### 해제
-
-```bash
-bash ~/Desktop/workspace/forge-glow/uninstall.sh
-```
-
----
-
-## 로드맵
-
-- [x] **Phase 1** — statusLine HUD MVP (L1)
-- [x] **Phase 2** — transcript 파싱 + 모델별 비용 + 캐시 히트율 + 낭비 감지 (L2)
-- [x] **Phase 3** — code-forge 강화 (L3, bin/forge surface 경유)
-- [x] **Phase 4** — 어댑터 프레임워크 + 레퍼런스 1개 (OMC) + install.sh 래핑 모드
-- [x] **Phase 5-1/5-2** — Codex CLI 파싱 + tmux 통합
-- [x] **Phase 5-3** — Python rich 대시보드 (`forge-glow-stats`)
-- ~~Standalone TUI / Node 렌더러 재작성~~ — 취소 (2026-06, 단일 플랫폼 사용자에게 과한 장식 — 2nd platform 사용자 실존 시 부활)
-- [x] **Phase 6-1** — OTel L5 레이어 + Grafana 템플릿 + Admin Analytics API
-- [x] **Phase 6-2** — 실시간 알림 (컨텍스트/비용/rate limit) + Slack webhook opt-in + update-available HUD
-- [x] **Phase 6-3** — Homebrew formula + PyPI 패키지 + GitHub Release 자동화 + `tools/metrics-report.sh`
-
-## 토큰 절약 팁
-
-forge-glow가 보여주는 지표를 활용한 절약 방법:
-
-- **캐시 히트율 80%+ 유지** — cache_read는 input 대비 10% 과금
-- **50% 넘으면 주의** — Context Rot 시작, 중간 정보 정확도 하락
-- **단순 작업은 haiku 서브에이전트** — Opus 대비 1/5 비용
-- **Read보다 Grep** — 불필요한 컨텍스트 적재 방지
-- **5분 이내 /compact** — 캐시 TTL(5분) 만료 전 실행
-
-## Integration
-
-forge-glow는 단독으로도 동작하지만, 자매 도구들과 결합 시 더 풍부한 정보를 제공합니다.
-
-| 자매 도구 | 상태 | 접점 | 효과 |
-|---|---|---|---|
-| [code-forge](https://github.com/ggombee/code-forge) | 🟢 wired | `bin/forge status --json` (L3 surface) + `.claude/state/quality.jsonl` | 에이전트/스킬 사용, 품질 게이트, REFLECT flag, effort 권고를 HUD 3줄차에 자동 표시 |
-| flow-toolkit | 📐 designed (휴면) | `flow run report` 결과 → `.policy/runs/<cycle>/result.json` | 사이클 통과율·영향 TC 결과를 워크플로우 패널에서 확인 (flow CLI 활성 시) |
-| forge-hearth | 📐 designed (휴면) | 동일 `sources.json` v2 schema 공유 (`~/.forge-glow/workflow.json`) | `forge-glow-stats --workflow` 패널에서 다중 프로젝트 progress를 같은 위치에서 |
-
-🟢 = 오늘 실제 연결되어 동작 / 📐 = 계약·코드는 준비, 해당 도구가 휴면이라 데이터 생산 0 (연결 자체는 graceful — 없으면 조용히 비표시)
-
-전체 데이터 계약은 본인 PC `code-forge/docs/contracts/INTEGRATION.md` 참고.
 
 ## License
 

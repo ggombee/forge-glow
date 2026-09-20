@@ -1,90 +1,45 @@
-# tmux 통합 — Claude + Codex HUD
+# tmux Codex 계정 배지와 전역 활동 요약
 
-Claude Code의 statusLine은 자기 영역에만 표시되지만, Codex CLI는 statusLine이 없습니다. **tmux 하단바**가 두 도구의 상태를 한 곳에서 보는 현실적 통합 지점입니다.
+`tmux/status-right.sh`는 `~/.claude/projects` 또는 `~/.codex/sessions`에서 최근
+5분 내 갱신된 JSONL이 있는지 확인합니다. Codex launcher가 현재 pane의
+`@forge_glow_codex_account` option을 설정하면 `👤 codex:개인` 또는
+`👤 codex:회사`를 우선 표시합니다.
 
----
+계정 배지는 launcher가 선택 직후 전달한 pane-scoped 값만 사용하며 세션 로그에서
+계정을 추측하지 않습니다. launcher 연동이 없을 때만 전역 최근 활동 표시로
+내려갑니다. 모델, 비용, context 같은 세션별 값은 Claude statusLine과
+[Codex native status line](codex-setup.md)이 source of truth입니다.
 
 ## 설정
 
-`~/.tmux.conf`에 추가:
-
 ```tmux
-set -g status-right-length 150
-set -g status-right "#(/Users/YOUR_USER/Desktop/workspace/forge-glow/tmux/status-right.sh)"
+set -g status-right-length 120
+set -g status-right "#(/absolute/path/to/forge-glow/tmux/status-right.sh '#{pane_id}' '#{pane_current_command}')"
 set -g status-interval 5
 ```
 
-`status-interval 5` — 5초마다 갱신. forge-glow statusLine의 refreshInterval과 맞춤.
+적용:
 
-reload:
 ```bash
 tmux source-file ~/.tmux.conf
 ```
 
----
+## 출력
 
-## 표시 예시
-
-### Codex 활성 세션
-
-```
-🤖 codex:gpt-5 $0.42 ctx:34% turns:12
+```text
+👤 codex:개인
+👤 codex:회사
+🌐 codex active (native status line 참조)  🧠 claude active (statusLine 참조)
 ```
 
-### Claude Code 활성
-
-```
-🧠 claude (statusLine 참조)
-```
-→ Claude Code 세션은 자체 statusLine을 쓰므로 중복 방지 차원에서 tmux엔 간단 표시만.
-
-### 아무 도구도 최근 5분 내 활동 없음
-
-```
-(빈 문자열)
-```
-
----
-
-## 비tmux 환경 대안
-
-### Starship
-
-`~/.config/starship.toml`에 custom module:
-
-```toml
-[custom.forge_glow]
-command = "/path/to/forge-glow/tmux/status-right.sh"
-when = "true"
-format = "[$output]($style) "
-```
-
-### zsh RPROMPT
-
-`~/.zshrc`:
+Codex 계정 전환 launcher는 Codex를 실행하기 전에 다음처럼 현재 pane option을
+설정하면 됩니다.
 
 ```bash
-forge_glow_status() {
-  /path/to/forge-glow/tmux/status-right.sh
-}
-RPROMPT='$(forge_glow_status)'
+tmux set-option -p -t "$TMUX_PANE" @forge_glow_codex_account personal
 ```
 
----
-
-## 동작 원리
-
-1. `~/.claude/projects/**/*.jsonl`과 `~/.codex/sessions/**/*.jsonl`의 mtime을 비교
-2. 5분 이내 수정된 파일이 있고, 더 최근인 쪽을 "활성 도구"로 간주
-3. Codex면 `parse-codex.sh`로 model/cost/ctx/turns 뽑아 출력
-4. Claude면 자체 statusLine이 더 풍부하므로 간단 표시만
-
----
-
-## 성능
-
-| 작업 | 예상 시간 |
-|------|----------|
-| find mtime 체크 | <10ms |
-| parse-codex.sh (tail -200) | <50ms |
-| 총 예산 | <100ms (tmux 5초 간격이라 넉넉) |
+지원 값은 `personal`, `company`입니다. badge는 foreground command가 `codex`일 때만
+보이므로 Codex를 종료하면 예전 계정 값이 남아 있어도 표시되지 않습니다. 계정
+연동 없이 최근 활동만 보이는 경우에는 이를 단지 “어떤 도구가 최근에
+활동했다”는 신호로 해석하세요.

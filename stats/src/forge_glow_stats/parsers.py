@@ -1,37 +1,45 @@
-"""forge-glow-stats — JSONL/OTel/usage 파서 (쉘 버전의 Python 포팅).
+"""Claude transcript/OTel 집계 파서.
 
-L2 transcript + L3 code-forge + L5 OTel 데이터를 Python으로 수집한다.
-파일 IO는 실패에 관대하다 — 소스 부재 시 빈 dict/list 반환.
+실시간 HUD는 현재 세션만 보지만, 이 대시보드는 최근 로컬 로그를
+집계하는 분석 뷰다. 파일이 없거나 깨져도 빈 결과로 동작한다.
 """
 from __future__ import annotations
 
 import json
 import os
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Iterable
 
-# 2026-04 기준 가격표 ($/MTok). 실제 정확값은 L5(OTel)가 cost_usd를 직접 제공하므로
-# L2 fallback 용도.
+
+# Claude API 가격표 fallback ($/MTok). OTel cost_usd와 이 값은 모두
+# 청구 확정값이 아닌 사용량 추정용이다.
 PRICES_USD_PER_MTOK: dict[str, dict[str, float]] = {
-    "fable":  {"input": 10.0, "output": 50.0, "cache_read": 1.0,  "cache_write": 12.5},
-    "opus":   {"input": 5.0,  "output": 25.0, "cache_read": 0.5,  "cache_write": 6.25},
-    "sonnet": {"input": 3.0,  "output": 15.0, "cache_read": 0.3,  "cache_write": 3.75},
-    "haiku":  {"input": 1.0,  "output": 5.0,  "cache_read": 0.1,  "cache_write": 1.25},
-    # Codex 대표 모델 (정확 가격은 OpenAI pricing 참조)
-    "gpt-5":  {"input": 5.0,  "output": 25.0, "cache_read": 2.5,  "cache_write": 5.0},
-    "gpt-4.1":{"input": 3.0,  "output": 15.0, "cache_read": 1.5,  "cache_write": 3.0},
-    "o3":     {"input": 10.0, "output": 40.0, "cache_read": 5.0,  "cache_write": 10.0},
-    "mini":   {"input": 1.0,  "output": 4.0,  "cache_read": 0.5,  "cache_write": 1.0},
+    "fable": {"input": 10.0, "output": 50.0, "cache_read": 1.0, "cache_write": 12.5},
+    "mythos": {"input": 10.0, "output": 50.0, "cache_read": 1.0, "cache_write": 12.5},
+    "opus": {"input": 5.0, "output": 25.0, "cache_read": 0.5, "cache_write": 6.25},
+    "opus-4.1": {"input": 15.0, "output": 75.0, "cache_read": 1.5, "cache_write": 18.75},
+    "sonnet": {"input": 3.0, "output": 15.0, "cache_read": 0.3, "cache_write": 3.75},
+    "sonnet-5": {"input": 2.0, "output": 10.0, "cache_read": 0.2, "cache_write": 2.5},
+    "haiku": {"input": 1.0, "output": 5.0, "cache_read": 0.1, "cache_write": 1.25},
+    "haiku-3.5": {"input": 0.8, "output": 4.0, "cache_read": 0.08, "cache_write": 1.0},
 }
 
 
 def short_model(name: str) -> str:
-    """모델 id/display에서 대표 키워드 추출."""
-    n = (name or "").lower()
-    for key in ("fable", "opus", "sonnet", "haiku", "gpt-5", "gpt-4.1", "o3", "mini"):
-        if key in n:
+    """모델 ID에서 표시용 계열명을 추출한다."""
+    lowered = (name or "").lower()
+    normalized = lowered.replace("_", "-").replace(".", "-").replace(" ", "-")
+    if (("opus-4-1-" in normalized or normalized.endswith("opus-4-1"))
+            or "opus-4-20" in normalized
+            or normalized.endswith("opus-4")):
+        return "opus-4.1"
+    if "haiku-3-5-" in normalized or normalized.endswith("haiku-3-5"):
+        return "haiku-3.5"
+    if "sonnet-5-" in normalized or normalized.endswith("sonnet-5"):
+        return "sonnet-5"
+    for key in ("fable", "mythos", "opus", "sonnet", "haiku"):
+        if key in lowered:
             return key
     return "unknown"
 
@@ -47,137 +55,216 @@ class ModelUsage:
     request_count: int = 0
 
     def estimate_cost(self) -> float:
-        """L5가 없을 때 가격표로 근사 계산."""
+        """OTel cost_usd가 없으면 가격표로 근사한다."""
         if self.cost_usd > 0:
             return self.cost_usd
-        p = PRICES_USD_PER_MTOK.get(self.model, PRICES_USD_PER_MTOK["sonnet"])
+        prices = PRICES_USD_PER_MTOK.get(self.model)
+        if prices is None:
+            return 0.0
         return (
-            self.input_tokens * p["input"]
-            + self.output_tokens * p["output"]
-            + self.cache_read * p["cache_read"]
-            + self.cache_write * p["cache_write"]
+            self.input_tokens * prices["input"]
+            + self.output_tokens * prices["output"]
+            + self.cache_read * prices["cache_read"]
+            + self.cache_write * prices["cache_write"]
         ) / 1_000_000
 
 
 @dataclass
 class Snapshot:
-    """대시보드 한 프레임의 전체 데이터."""
+    """대시보드 한 프레임의 로컬 집계."""
     models: dict[str, ModelUsage] = field(default_factory=dict)
     total_cost_usd: float = 0.0
     cache_hit_rate: float = 0.0
     tools_used: dict[str, int] = field(default_factory=dict)
-    forge_agents: dict[str, int] = field(default_factory=dict)
-    forge_skills: dict[str, int] = field(default_factory=dict)
     otel_available: bool = False
     update_available_reason: str | None = None
-    codex_active: bool = False
-    codex_model: str | None = None
-    codex_cost: float = 0.0
 
     def add_model(self, usage: ModelUsage) -> None:
         key = usage.model
-        if key in self.models:
-            m = self.models[key]
-            m.input_tokens += usage.input_tokens
-            m.output_tokens += usage.output_tokens
-            m.cache_read += usage.cache_read
-            m.cache_write += usage.cache_write
-            m.cost_usd += usage.cost_usd
-            m.request_count += usage.request_count
-        else:
+        if key not in self.models:
             self.models[key] = usage
+            return
+        current = self.models[key]
+        current.input_tokens += usage.input_tokens
+        current.output_tokens += usage.output_tokens
+        current.cache_read += usage.cache_read
+        current.cache_write += usage.cache_write
+        current.cost_usd += usage.cost_usd
+        current.request_count += usage.request_count
 
 
 def _iter_jsonl(path: Path, limit: int = 1000) -> Iterable[dict]:
-    """jsonl을 마지막 limit 줄까지 안전하게 순회."""
+    """JSONL의 마지막 limit줄을 안전하게 순회한다."""
     if not path.exists():
-        return []
+        return
     try:
-        with path.open() as f:
-            lines = f.readlines()
+        with path.open(encoding="utf-8", errors="replace") as handle:
+            lines = handle.readlines()
     except OSError:
-        return []
+        return
     for line in lines[-limit:]:
-        line = line.strip()
-        if not line:
-            continue
         try:
-            yield json.loads(line)
-        except json.JSONDecodeError:
+            payload = json.loads(line)
+        except (json.JSONDecodeError, TypeError):
             continue
+        if isinstance(payload, dict):
+            yield payload
+
+
+def _safe_int(value: object) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _safe_float(value: object) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _otel_value(value: object) -> object:
+    if not isinstance(value, dict):
+        return value
+    for key in ("stringValue", "intValue", "doubleValue", "boolValue"):
+        if key in value:
+            raw = value[key]
+            return _safe_int(raw) if key == "intValue" else raw
+    return value
+
+
+def _otel_attributes(items: object) -> dict[str, object]:
+    if not isinstance(items, list):
+        return {}
+    result: dict[str, object] = {}
+    for item in items:
+        if isinstance(item, dict) and item.get("key"):
+            result[str(item["key"])] = _otel_value(item.get("value"))
+    return result
+
+
+def _iter_otel_events(path: Path, limit: int = 2000) -> Iterable[dict]:
+    """Flat JSON과 file exporter OTLP/JSON envelope를 하나의 event 형태로 바꿄다."""
+    for payload in _iter_jsonl(path, limit=limit):
+        if payload.get("name"):
+            yield payload
+            continue
+        for resource_log in payload.get("resourceLogs", []) or []:
+            resource = resource_log.get("resource", {}) or {}
+            resource_attrs = _otel_attributes(resource.get("attributes"))
+            scopes = (resource_log.get("scopeLogs")
+                      or resource_log.get("instrumentationLibraryLogs") or [])
+            for scope in scopes:
+                records = scope.get("logRecords") or scope.get("logs") or []
+                for record in records:
+                    body = record.get("body", {}) or {}
+                    attrs = dict(resource_attrs)
+                    attrs.update(_otel_attributes(record.get("attributes")))
+                    yield {
+                        "name": body.get("stringValue") or record.get("name") or "",
+                        "attributes": attrs,
+                    }
 
 
 def parse_otel(log_path: Path | None = None) -> tuple[dict[str, ModelUsage], bool]:
-    """L5: OTel file exporter의 claude_code.api_request 이벤트 파싱."""
-    path = log_path or Path(os.environ.get("FORGE_GLOW_OTEL_LOG",
-                                            Path.home() / ".forge-glow" / "otel.log"))
+    """OTel api_request를 최근 로그 범위로 집계한다."""
+    path = log_path or Path(os.environ.get(
+        "FORGE_GLOW_OTEL_LOG", Path.home() / ".forge-glow" / "otel.log"
+    ))
     usages: dict[str, ModelUsage] = {}
-    available = path.exists()
-    if not available:
+    if not path.exists():
         return usages, False
-    for ev in _iter_jsonl(path, limit=2000):
-        if ev.get("name") != "claude_code.api_request":
+    available = False
+    for event in _iter_otel_events(path):
+        if event.get("name") != "claude_code.api_request":
             continue
-        attr = ev.get("attributes", {}) or {}
-        key = short_model(attr.get("model", ""))
-        u = usages.setdefault(key, ModelUsage(model=key))
-        u.input_tokens += int(attr.get("input_tokens", 0) or 0)
-        u.output_tokens += int(attr.get("output_tokens", 0) or 0)
-        u.cache_read += int(attr.get("cache_read_tokens", 0) or 0)
-        u.cost_usd += float(attr.get("cost_usd", 0) or 0)
-        u.request_count += 1
-    return usages, True
+        available = True
+        attrs = event.get("attributes", {}) or {}
+        key = short_model(str(attrs.get("model", "")))
+        usage = usages.setdefault(key, ModelUsage(model=key))
+        usage.input_tokens += _safe_int(attrs.get("input_tokens"))
+        usage.output_tokens += _safe_int(attrs.get("output_tokens"))
+        usage.cache_read += _safe_int(attrs.get("cache_read_tokens"))
+        usage.cache_write += _safe_int(attrs.get("cache_creation_tokens"))
+        usage.cost_usd += _safe_float(attrs.get("cost_usd"))
+        usage.request_count += 1
+    return usages, available
 
 
-def parse_transcripts(projects_dir: Path | None = None) -> tuple[dict[str, ModelUsage], dict[str, int]]:
-    """L2: 최근 세션 transcript 병합. OTel 없을 때 fallback."""
-    root = projects_dir or Path(os.environ.get("CLAUDE_PROJECTS_DIR",
-                                               Path.home() / ".claude" / "projects"))
+def parse_transcripts(
+    projects_dir: Path | None = None,
+) -> tuple[dict[str, ModelUsage], dict[str, int]]:
+    """최근 Claude transcript 5개를 집계한다.
+
+    assistant message는 여러 transcript 레코드로 반복될 수 있으므로
+    message.id로 토큰 중복을 제거한다. 도구는 message.content[].tool_use를 읽는다.
+    """
+    root = projects_dir or Path(os.environ.get(
+        "CLAUDE_PROJECTS_DIR", Path.home() / ".claude" / "projects"
+    ))
     usages: dict[str, ModelUsage] = {}
     tools: dict[str, int] = {}
     if not root.exists():
         return usages, tools
-    # 최근 5개 jsonl만 (성능)
-    jsonls = sorted(root.rglob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)[:5]
-    for jp in jsonls:
-        for ev in _iter_jsonl(jp, limit=1000):
-            et = ev.get("type")
-            if et == "tool_use":
-                name = ev.get("name") or "unknown"
-                tools[name] = tools.get(name, 0) + 1
-            if et == "assistant":
-                msg = ev.get("message", {}) or {}
-                usage = msg.get("usage", {}) or {}
-                key = short_model(msg.get("model", ""))
-                u = usages.setdefault(key, ModelUsage(model=key))
-                u.input_tokens += int(usage.get("input_tokens", 0) or 0)
-                u.output_tokens += int(usage.get("output_tokens", 0) or 0)
-                u.cache_read += int(usage.get("cache_read_input_tokens", 0) or 0)
-                u.cache_write += int(usage.get("cache_creation_input_tokens", 0) or 0)
-                u.request_count += 1
+
+    try:
+        jsonls = sorted(root.rglob("*.jsonl"), key=lambda p: p.stat().st_mtime,
+                        reverse=True)[:5]
+    except OSError:
+        return usages, tools
+
+    for path in jsonls:
+        seen_messages: set[str] = set()
+        seen_tools: set[str] = set()
+        for event in _iter_jsonl(path, limit=1000):
+            message = event.get("message", {}) or {}
+            content = message.get("content", []) or []
+            if isinstance(content, list):
+                for block in content:
+                    if not isinstance(block, dict) or block.get("type") != "tool_use":
+                        continue
+                    tool_id = str(block.get("id") or "")
+                    if tool_id and tool_id in seen_tools:
+                        continue
+                    if tool_id:
+                        seen_tools.add(tool_id)
+                    name = str(block.get("name") or "unknown")
+                    tools[name] = tools.get(name, 0) + 1
+
+            if event.get("type") != "assistant" or not message.get("usage"):
+                continue
+            message_id = str(message.get("id") or event.get("uuid") or "")
+            if message_id and message_id in seen_messages:
+                continue
+            if message_id:
+                seen_messages.add(message_id)
+            raw = message.get("usage", {}) or {}
+            key = short_model(str(message.get("model", "")))
+            usage = usages.setdefault(key, ModelUsage(model=key))
+            usage.input_tokens += _safe_int(raw.get("input_tokens"))
+            usage.output_tokens += _safe_int(raw.get("output_tokens"))
+            usage.cache_read += _safe_int(raw.get("cache_read_input_tokens"))
+            cache_creation = raw.get("cache_creation")
+            if isinstance(cache_creation, dict):
+                cache_write = (
+                    _safe_int(cache_creation.get("ephemeral_5m_input_tokens"))
+                    + _safe_int(cache_creation.get("ephemeral_1h_input_tokens"))
+                )
+            else:
+                cache_write = 0
+            usage.cache_write += cache_write or _safe_int(
+                raw.get("cache_creation_input_tokens")
+            )
+            usage.request_count += 1
     return usages, tools
 
 
-def parse_forge_usage(usage_log: Path | None = None) -> tuple[dict[str, int], dict[str, int]]:
-    """L3: code-forge bellows usage.jsonl — 에이전트/스킬 카운트 (최근 세션)."""
-    path = usage_log or (Path.home() / ".code-forge" / "usage.jsonl")
-    agents: dict[str, int] = {}
-    skills: dict[str, int] = {}
-    if not path.exists():
-        return agents, skills
-    for ev in _iter_jsonl(path, limit=5000):
-        t = ev.get("type")
-        name = ev.get("name") or "unknown"
-        if t == "agent":
-            agents[name] = agents.get(name, 0) + 1
-        elif t == "skill":
-            skills[name] = skills.get(name, 0) + 1
-    return agents, skills
-
-
 def parse_update_flag(state_dir: Path | None = None) -> str | None:
-    path = (state_dir or Path(os.environ.get("FORGE_GLOW_STATE_DIR",
-                                             Path.home() / ".forge-glow"))) / "update-available"
+    path = (state_dir or Path(os.environ.get(
+        "FORGE_GLOW_STATE_DIR", Path.home() / ".forge-glow"
+    ))) / "update-available"
     if not path.exists():
         return None
     try:
@@ -186,71 +273,28 @@ def parse_update_flag(state_dir: Path | None = None) -> str | None:
         return None
 
 
-def parse_codex(codex_home: Path | None = None) -> tuple[bool, str | None, float]:
-    root = codex_home or Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
-    sessions = root / "sessions"
-    if not sessions.exists():
-        return False, None, 0.0
-    recent = [p for p in sessions.rglob("*.jsonl")
-              if datetime.fromtimestamp(p.stat().st_mtime) > datetime.now() - timedelta(minutes=5)]
-    if not recent:
-        return False, None, 0.0
-    recent.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-    latest = recent[0]
-    # 검증된 on-disk 스키마(event-schema.md §3): 모델은 turn_context.payload.model,
-    # usage 는 payload.type=="token_count" 의 payload.info.total_token_usage (누적 — 마지막 1건만, 합산 X).
-    # ⚠ 과거의 turn.completed / ev["model"] 스키마는 디스크에 존재하지 않아 항상 0이었음.
-    model = None
-    last_usage: dict | None = None
-    for ev in _iter_jsonl(latest, limit=500):
-        if ev.get("type") == "turn_context":
-            m = (ev.get("payload") or {}).get("model")
-            if m:
-                model = m
-        payload = ev.get("payload") or {}
-        if payload.get("type") == "token_count":
-            ttu = (payload.get("info") or {}).get("total_token_usage")
-            if ttu:
-                last_usage = ttu
-    u = last_usage or {}
-    inp = int(u.get("input_tokens", 0) or 0)
-    cached = int(u.get("cached_input_tokens", 0) or 0)
-    out = int(u.get("output_tokens", 0) or 0)
-    key = short_model(model or "")
-    p = PRICES_USD_PER_MTOK.get(key, PRICES_USD_PER_MTOK["gpt-4.1"])
-    cost = (inp * p["input"] + out * p["output"] + cached * p["cache_read"]) / 1_000_000
-    return True, model, round(cost, 2)
-
-
 def build_snapshot() -> Snapshot:
-    """모든 소스 통합 — L5 우선, L2 fallback."""
-    snap = Snapshot()
-
-    otel_usages, snap.otel_available = parse_otel()
-    if snap.otel_available and otel_usages:
-        for m in otel_usages.values():
-            snap.add_model(m)
+    """OTel을 우선하고 transcript를 fallback으로 사용한다."""
+    snapshot = Snapshot()
+    otel_usages, snapshot.otel_available = parse_otel()
+    if snapshot.otel_available and otel_usages:
+        for usage in otel_usages.values():
+            snapshot.add_model(usage)
     else:
-        l2_usages, tools = parse_transcripts()
-        for m in l2_usages.values():
-            snap.add_model(m)
-        snap.tools_used = tools
+        transcript_usages, tools = parse_transcripts()
+        for usage in transcript_usages.values():
+            snapshot.add_model(usage)
+        snapshot.tools_used = tools
 
-    # 항상 tools (L5에서 빈 경우 L2로 보강)
-    if not snap.tools_used:
-        _, tools = parse_transcripts()
-        snap.tools_used = tools
+    if not snapshot.tools_used:
+        _, snapshot.tools_used = parse_transcripts()
+    snapshot.update_available_reason = parse_update_flag()
 
-    snap.forge_agents, snap.forge_skills = parse_forge_usage()
-    snap.update_available_reason = parse_update_flag()
-    snap.codex_active, snap.codex_model, snap.codex_cost = parse_codex()
-
-    # 총 비용 + 캐시 히트율
     total_input = total_cache_read = 0
-    for m in snap.models.values():
-        snap.total_cost_usd += m.estimate_cost()
-        total_input += m.input_tokens + m.cache_read
-        total_cache_read += m.cache_read
+    for usage in snapshot.models.values():
+        snapshot.total_cost_usd += usage.estimate_cost()
+        total_input += usage.input_tokens + usage.cache_read
+        total_cache_read += usage.cache_read
     if total_input > 0:
-        snap.cache_hit_rate = total_cache_read / total_input * 100
-    return snap
+        snapshot.cache_hit_rate = total_cache_read / total_input * 100
+    return snapshot

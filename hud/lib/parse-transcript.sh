@@ -1,120 +1,137 @@
 #!/usr/bin/env bash
 # forge-glow — parse-transcript.sh
-# L2: transcript.jsonl 파싱 — 도구 활동, 서브에이전트, 모델별 비용, 캐시 히트율
-# shellcheck disable=SC2034  # G_* 변수들은 statusline.sh가 sourcing 후 사용
+# 현재 Claude 세션 transcript.jsonl 보강 파서.
+# shellcheck disable=SC2034  # G_* 변수는 statusline.sh가 sourcing 후 사용
+#
+# Claude Code는 하나의 assistant message를 thinking/tool/text 레코드로 여러 번
+# 저장할 수 있다. message.id로 중복 제거하지 않으면 토큰과 비용이 과대
+# 계산된다. 도구 호출은 top-level 이벤트가 아닌 message.content[].tool_use다.
 
 parse_transcript() {
   local transcript="$1"
 
-  # transcript 유무와 관계없이 모든 출력 변수 선제 초기화 (set -u 방어)
   G_TOOL_SUMMARY=""
-  G_SUBAGENT=""
   G_MODEL_COSTS=""
   G_CACHE_HIT_PCT=""
-  G_WASTE_WARN=""
 
   [ -z "$transcript" ] || [ ! -f "$transcript" ] && return
+  command -v jq >/dev/null 2>&1 || return
 
-  # 도구 사용 집계 (최근 200줄)
-  G_TOOL_SUMMARY=$(tail -200 "$transcript" 2>/dev/null \
-    | jq -r 'select(.type=="tool_use") | .name // empty' 2>/dev/null \
-    | sort | uniq -c | sort -rn | head -5 \
-    | awk '{printf "%s×%s ", $2, $1}' 2>/dev/null)
-
-  # 서브에이전트 실행 감지 (최근 50줄에서 시작했는데 끝 안 난 것)
-  local agent_starts agent_stops
-  agent_starts=$(tail -50 "$transcript" 2>/dev/null \
-    | jq -r 'select(.type=="agent_start") | .name // empty' 2>/dev/null)
-  agent_stops=$(tail -50 "$transcript" 2>/dev/null \
-    | jq -r 'select(.type=="agent_stop") | .name // empty' 2>/dev/null)
-
-  if [ -n "$agent_starts" ]; then
-    # 시작됐지만 끝나지 않은 에이전트 찾기
-    local running=""
-    while IFS= read -r name; do
-      if ! echo "$agent_stops" | grep -q "$name"; then
-        running="$name"
-        break
-      fi
-    done <<< "$agent_starts"
-    G_SUBAGENT="$running"
+  local top_tools=5
+  if [ "${G_COLUMNS:-0}" -gt 0 ] 2>/dev/null && [ "${G_COLUMNS:-0}" -lt 100 ] 2>/dev/null; then
+    top_tools=3
   fi
 
-  # 모델별 비용 + 캐시 히트율 (최근 500줄)
-  local model_data
-  model_data=$(tail -500 "$transcript" 2>/dev/null \
-    | jq -r 'select(.type=="assistant" and .message.usage) |
-      .message | "\(.model // "unknown") \(.usage.input_tokens // 0) \(.usage.output_tokens // 0) \(.usage.cache_read_input_tokens // 0) \(.usage.cache_creation_input_tokens // 0)"' 2>/dev/null)
+  # tail/jq를 각각 반복하지 않고 한 번의 스냅샷으로 도구·비용·캐시를 모두 집계한다.
+  local parsed
+  parsed=$(tail -500 "$transcript" 2>/dev/null | jq -rs --argjson top "$top_tools" '
+    def short_model($m):
+      ($m | ascii_downcase) as $n
+      | if ($n | contains("fable")) then "fable"
+        elif ($n | contains("mythos")) then "mythos"
+        elif ($n | test("opus[-_ ]4([._-]1)?($|[-_]20[0-9]{6})")) then "opus-4.1"
+        elif ($n | contains("opus")) then "opus"
+        elif ($n | test("haiku[-_ ]3[._-]5($|[-_]20[0-9]{6})")) then "haiku-3.5"
+        elif ($n | test("sonnet[-_ ]5($|[-_])")) then "sonnet-5"
+        elif ($n | contains("sonnet")) then "sonnet"
+        elif ($n | contains("haiku")) then "haiku"
+        else "unknown"
+        end;
 
-  # 낭비 감지 (최근 20개 도구 호출 분석)
-  G_WASTE_WARN=""
-  local recent_tools
-  recent_tools=$(tail -100 "$transcript" 2>/dev/null \
-    | jq -r 'select(.type=="tool_use") | "\(.name) \(.model // "unknown")"' 2>/dev/null \
-    | tail -20)
+    # Claude API 가격표 fallback. 청구 확정값이 아니므로 HUD는 ~로 표시한다.
+    def price($model):
+      ($model | ascii_downcase) as $m
+      | if ($m | test("fable|mythos")) then {i:10, o:50, cr:1}
+        elif ($m | test("opus[-_ ]4([._-]1)?($|[-_]20[0-9]{6})")) then {i:15, o:75, cr:1.5}
+        elif ($m | contains("opus")) then {i:5, o:25, cr:0.5}
+        elif ($m | test("sonnet[-_ ]5($|[-_])")) then {i:2, o:10, cr:0.2}
+        elif ($m | contains("sonnet")) then {i:3, o:15, cr:0.3}
+        elif ($m | test("haiku[-_ ]3[._-]5($|[-_]20[0-9]{6})")) then {i:0.8, o:4, cr:0.08}
+        elif ($m | contains("haiku")) then {i:1, o:5, cr:0.1}
+        else null
+        end;
 
-  if [ -n "$recent_tools" ]; then
-    # opus에서 Read 5회 연속 → haiku 권장
-    local opus_reads
-    opus_reads=$(echo "$recent_tools" | grep -E "Read.*opus" | wc -l | tr -d ' ')
-    if [ "$opus_reads" -ge 5 ]; then
-      G_WASTE_WARN="opus Read ${opus_reads}회 — haiku 전환 권장"
-    fi
+    def money:
+      (. * 100 + 0.5 | floor) as $c
+      | (($c / 100 | floor | tostring) + "." +
+         (($c % 100 | floor | tostring) | if length == 1 then "0" + . else . end));
 
-    # Read 결과 2000+ 토큰 빈발 → Grep 추천
-    local big_reads
-    big_reads=$(tail -50 "$transcript" 2>/dev/null \
-      | jq -r 'select(.type=="tool_result" and .content) | .content | length' 2>/dev/null \
-      | awk '$1 > 2000 {c++} END {print c+0}')
-    if [ "$big_reads" -ge 3 ] && [ -z "$G_WASTE_WARN" ]; then
-      G_WASTE_WARN="대용량 Read ${big_reads}회 — Grep 추천"
-    fi
-  fi
+    . as $events
+    | [
+        $events
+        | to_entries[]
+        | . as $entry
+        | $entry.value
+        | select(.type == "assistant" and (.message.usage? != null))
+        | {
+            id: (.message.id // .uuid // ("row:" + ($entry.key | tostring))),
+            model: (.message.model // "unknown"),
+            input: (.message.usage.input_tokens // 0),
+            output: (.message.usage.output_tokens // 0),
+            cache_read: (.message.usage.cache_read_input_tokens // 0),
+            cache_5m: (.message.usage.cache_creation.ephemeral_5m_input_tokens // 0),
+            cache_1h: (.message.usage.cache_creation.ephemeral_1h_input_tokens // 0),
+            cache_fallback: (.message.usage.cache_creation_input_tokens // 0)
+          }
+      ]
+    | group_by(.id)
+    | map(last)
+    | map(.cache_5m = (if (.cache_5m + .cache_1h) == 0 then .cache_fallback else .cache_5m end))
+    as $messages
+    | [
+        $events
+        | to_entries[]
+        | . as $event
+        | (($event.value.message.content // []) | to_entries[])
+        | . as $block
+        | $block.value
+        | select(.type == "tool_use")
+        | {
+            id: (.id // ("row:" + ($event.key | tostring) + ":" + ($block.key | tostring))),
+            name: (.name // "unknown")
+          }
+      ]
+    | unique_by(.id)
+    | group_by(.name)
+    | map({name: .[0].name, count: length})
+    | sort_by([-.count, .name])
+    | .[0:$top]
+    | map("\(.name)×\(.count)")
+    | join(" ")
+    as $tools
+    | [
+        $messages[]
+        | (price(.model)) as $p
+        | select($p != null)
+        | {
+            name: short_model(.model),
+            cost: (((.input * $p.i) + (.output * $p.o) + (.cache_read * $p.cr)
+                    + (.cache_5m * $p.i * 1.25) + (.cache_1h * $p.i * 2)) / 1000000)
+          }
+      ]
+    | group_by(.name)
+    | map({name: .[0].name, cost: (map(.cost) | add)})
+    | map(select(.cost > 0.001))
+    | sort_by(-.cost)
+    as $models
+    | ($messages | map(.input + .cache_read + .cache_5m + .cache_1h) | add // 0) as $cache_total
+    | ($messages | map(.cache_read) | add // 0) as $cache_read
+    | [
+        "TOOLS\t\($tools)",
+        "CACHE\t\(if $cache_total > 0 then (($cache_read / $cache_total * 100) | round) else 0 end)",
+        ($models[] | "MODEL\t\(.name)\t\(.cost | money)")
+      ]
+    | .[]
+  ' 2>/dev/null)
 
-  # 캐시 miss 연속 감지 (최근 3턴 모두 cache_read=0이면 경고)
-  local cache_misses
-  cache_misses=$(tail -100 "$transcript" 2>/dev/null \
-    | jq -r 'select(.type=="assistant" and .message.usage) | .message.usage.cache_read_input_tokens // 0' 2>/dev/null \
-    | tail -3 | awk '$1 == 0 {c++} END {print c+0}')
-  if [ "$cache_misses" -ge 3 ] && [ -z "$G_WASTE_WARN" ]; then
-    G_WASTE_WARN="cache miss 3턴 연속 — /compact 타이밍 조정"
-  fi
+  [ -z "$parsed" ] && return
 
-  if [ -n "$model_data" ]; then
-    # 모델별 비용 계산 + 캐시 히트율
-    local result
-    result=$(echo "$model_data" | awk '
-    {
-      m=$1; inp=$2; out=$3; cr=$4; cc=$5
-      # 모델별 가격 ($/MTok) — fable이 opus보다 먼저 (id에 둘 다 안 들어가지만 신규 티어 우선 원칙)
-      if (m ~ /fable/)      { ip=10; op=50; crp=1; ccp=12.5 }
-      else if (m ~ /opus/)  { ip=5; op=25; crp=0.5; ccp=6.25 }
-      else if (m ~ /haiku/) { ip=1; op=5; crp=0.1; ccp=1.25 }
-      else                  { ip=3; op=15; crp=0.3; ccp=3.75 }
-
-      # 짧은 모델명
-      short=m
-      if (m ~ /fable/) short="fable"
-      else if (m ~ /opus/) short="opus"
-      else if (m ~ /sonnet/) short="sonnet"
-      else if (m ~ /haiku/) short="haiku"
-
-      cost[short] += (inp*ip + out*op + cr*crp + cc*ccp) / 1000000
-      total_cache_read += cr
-      total_input += inp + cr + cc
-    }
-    END {
-      # 모델별 비용
-      for (s in cost) {
-        if (cost[s] > 0.001) printf "%s:$%.2f ", s, cost[s]
-      }
-      printf "\n"
-      # 캐시 히트율
-      if (total_input > 0) printf "%.0f", (total_cache_read / total_input) * 100
-      else printf "0"
-    }')
-
-    G_MODEL_COSTS=$(echo "$result" | head -1)
-    G_CACHE_HIT_PCT=$(echo "$result" | tail -1)
-  fi
+  local kind value amount
+  while IFS=$'\t' read -r kind value amount; do
+    case "$kind" in
+      TOOLS) G_TOOL_SUMMARY="$value" ;;
+      CACHE) G_CACHE_HIT_PCT="$value" ;;
+      MODEL) G_MODEL_COSTS+="${value}:\$${amount} " ;;
+    esac
+  done <<< "$parsed"
 }

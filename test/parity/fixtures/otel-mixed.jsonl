@@ -1,0 +1,4 @@
+{"name":"claude_code.api_request","attributes":{"session.id":"parity-test-session","model":"claude-opus-4-8","duration_ms":1000,"input_tokens":900,"output_tokens":100,"cache_read_tokens":100,"cache_creation_tokens":100,"cost_usd":1.25}}
+{"name":"claude_code.tool_result","attributes":{"session.id":"parity-test-session","tool_name":"Read","duration_ms":20,"success":true}}
+{"name":"claude_code.api_request","attributes":{"session.id":"other-session","model":"claude-sonnet-4-6","duration_ms":9000,"input_tokens":9000,"output_tokens":1000,"cache_read_tokens":0,"cost_usd":9.99}}
+{"name":"claude_code.tool_result","attributes":{"session.id":"other-session","tool_name":"Bash","duration_ms":200,"success":false}}

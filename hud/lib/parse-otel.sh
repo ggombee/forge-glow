@@ -1,105 +1,108 @@
 #!/usr/bin/env bash
 # forge-glow — parse-otel.sh
-# L5: Claude Code OTel 이벤트 파싱 (가장 정확한 메트릭 소스)
-# shellcheck disable=SC2034  # G_OTEL_* 변수들은 statusline.sh가 sourcing 후 사용
+# Claude Code OTel logs/events를 현재 session.id로 격리해 보강한다.
+# shellcheck disable=SC2034  # G_OTEL_* 변수는 statusline.sh가 sourcing 후 사용
 #
-# 환경변수:
-#   FORGE_GLOW_OTEL_LOG — OTLP file exporter 출력 경로 (설정 시 L5 활성)
-#                        기본값: $HOME/.forge-glow/otel.log
-#
-# 소비 이벤트:
-#   claude_code.api_request   — model, duration_ms, input/output_tokens, cache_read_tokens, cost_usd
-#   claude_code.tool_result   — tool_name, duration_ms, success
-#
-# L5가 활성이면 L2 transcript 파싱의 모델별 비용/캐시 히트율을 대체 (더 정확).
-# L5 없으면 L2/L3 fallback — 이 함수는 조용히 빈 값 반환.
+# OTel Collector file exporter의 표준 OTLP/JSON envelope(resourceLogs/scopeLogs/logRecords)와
+# 구버전 forge-glow의 flat JSON 형식을 모두 읽는다. cost_usd는 Claude가 생성한
+# 추정값이며 청구 확정값이 아니다.
 
 parse_otel() {
+  local session_id="${1:-}"
+
   G_OTEL_AVAILABLE=false
   G_OTEL_MODEL_COSTS=""
   G_OTEL_CACHE_HIT_PCT=""
-  G_OTEL_AVG_DURATION=""
-  G_OTEL_TOOL_SUCCESS_PCT=""
+
+  # session_id가 없으면 전역 이벤트를 현재 세션으로 추측하지 않는다.
+  [ -z "$session_id" ] && return
 
   local log_file="${FORGE_GLOW_OTEL_LOG:-$HOME/.forge-glow/otel.log}"
   [ ! -f "$log_file" ] && return
+  command -v jq >/dev/null 2>&1 || return
 
-  # 최근 500줄만 소비 (성능 + 오래된 세션 영향 최소화)
-  local recent
-  recent=$(tail -500 "$log_file" 2>/dev/null)
-  [ -z "$recent" ] && return
+  local parsed
+  parsed=$(tail -500 "$log_file" 2>/dev/null | jq -rs --arg sid "$session_id" '
+    def otel_value:
+      if type != "object" then .
+      elif has("stringValue") then .stringValue
+      elif has("intValue") then (.intValue | tonumber? // .)
+      elif has("doubleValue") then .doubleValue
+      elif has("boolValue") then .boolValue
+      else .
+      end;
 
-  G_OTEL_AVAILABLE=true
+    def attr_map($items):
+      reduce (($items // [])[]) as $item ({}; .[$item.key] = ($item.value | otel_value));
 
-  # ── claude_code.api_request 집계 ───────────────────────────
-  # OTel file exporter는 이벤트당 한 줄 JSON. attributes.* 에서 값 추출.
-  local api_data
-  api_data=$(echo "$recent" | jq -rs '
-    [ .[] | select(.name == "claude_code.api_request") |
-      {
-        model: (.attributes.model // "unknown"),
-        duration_ms: (.attributes.duration_ms // 0),
-        input: (.attributes.input_tokens // 0),
-        output: (.attributes.output_tokens // 0),
-        cache_read: (.attributes.cache_read_tokens // 0),
-        cost: (.attributes.cost_usd // 0)
-      }
-    ] | .[] | "\(.model) \(.duration_ms) \(.input) \(.output) \(.cache_read) \(.cost)"
+    def events:
+      .[]
+      | if ((.resourceLogs? // null) | type) == "array" then
+          .resourceLogs[]? as $resource_log
+          | attr_map($resource_log.resource.attributes) as $resource_attrs
+          | ($resource_log.scopeLogs // $resource_log.instrumentationLibraryLogs // [])[]?
+          | (.logRecords // .logs // [])[]?
+          | {
+              name: (.body.stringValue // .name // ""),
+              attributes: ($resource_attrs + attr_map(.attributes))
+            }
+        elif .name? then
+          {name: .name, attributes: (.attributes // {})}
+        else empty
+        end;
+
+    def number($value): ($value | tonumber? // 0);
+    def short_model($m):
+      ($m | ascii_downcase) as $n
+      | if ($n | contains("fable")) then "fable"
+        elif ($n | contains("mythos")) then "mythos"
+        elif ($n | contains("opus")) then "opus"
+        elif ($n | contains("sonnet")) then "sonnet"
+        elif ($n | contains("haiku")) then "haiku"
+        else "unknown"
+        end;
+    def money:
+      (. * 100 + 0.5 | floor) as $c
+      | (($c / 100 | floor | tostring) + "." +
+         (($c % 100 | floor | tostring) | if length == 1 then "0" + . else . end));
+
+    [events | select((.attributes["session.id"] // .attributes.session_id // "") == $sid)] as $events
+    | [
+        $events[]
+        | select(.name == "claude_code.api_request")
+          | {
+            model: (.attributes.model // "unknown"),
+            input: number(.attributes.input_tokens),
+            cache_read: number(.attributes.cache_read_tokens),
+            cache_create: number(.attributes.cache_creation_tokens),
+            cost: number(.attributes.cost_usd)
+          }
+      ] as $api
+    | [
+        "AVAILABLE\t\(($api | length) > 0)",
+        "CACHE\t\(if ($api | map(.input + .cache_read + .cache_create) | add // 0) > 0
+                    then (($api | map(.cache_read) | add // 0) /
+                          ($api | map(.input + .cache_read + .cache_create) | add) * 100 | round)
+                    else 0 end)",
+        ($api
+          | group_by(short_model(.model))
+          | map({name: short_model(.[0].model), cost: (map(.cost) | add)})
+          | map(select(.cost > 0.001))
+          | sort_by(-.cost)
+          | .[]
+          | "MODEL\t\(.name)\t\(.cost | money)")
+      ]
+    | .[]
   ' 2>/dev/null)
 
-  if [ -n "$api_data" ]; then
-    # 모델별 비용 집계 (Anthropic이 이미 계산한 cost_usd 직접 사용)
-    local result
-    result=$(echo "$api_data" | awk '
-    {
-      m=$1; dur=$2; inp=$3; out=$4; cr=$5; cost=$6
+  [ -z "$parsed" ] && return
 
-      short=m
-      if (m ~ /opus/) short="opus"
-      else if (m ~ /sonnet/) short="sonnet"
-      else if (m ~ /haiku/) short="haiku"
-
-      model_cost[short] += cost
-      total_duration += dur
-      total_input += inp + cr
-      total_cache_read += cr
-      total_requests++
-    }
-    END {
-      for (s in model_cost) {
-        if (model_cost[s] > 0.001) printf "%s:$%.2f ", s, model_cost[s]
-      }
-      printf "\n"
-      if (total_input > 0) printf "%.0f\n", (total_cache_read / total_input) * 100
-      else printf "0\n"
-      if (total_requests > 0) printf "%d\n", total_duration / total_requests
-      else printf "0\n"
-    }')
-
-    G_OTEL_MODEL_COSTS=$(echo "$result" | sed -n '1p')
-    G_OTEL_CACHE_HIT_PCT=$(echo "$result" | sed -n '2p')
-    G_OTEL_AVG_DURATION=$(echo "$result" | sed -n '3p')
-  fi
-
-  # ── claude_code.tool_result 집계 ───────────────────────────
-  local tool_stats
-  tool_stats=$(echo "$recent" | jq -rs '
-    [ .[] | select(.name == "claude_code.tool_result") |
-      (.attributes.success // false)
-    ] |
-    {
-      total: length,
-      success: ([.[] | select(.)] | length)
-    } |
-    "\(.success) \(.total)"
-  ' 2>/dev/null)
-
-  if [ -n "$tool_stats" ]; then
-    local success total
-    success=$(echo "$tool_stats" | awk '{print $1}')
-    total=$(echo "$tool_stats" | awk '{print $2}')
-    if [ "${total:-0}" -gt 0 ] 2>/dev/null; then
-      G_OTEL_TOOL_SUCCESS_PCT=$(awk -v s="$success" -v t="$total" 'BEGIN{printf "%.0f", (s/t)*100}')
-    fi
-  fi
+  local kind value amount
+  while IFS=$'\t' read -r kind value amount; do
+    case "$kind" in
+      AVAILABLE) G_OTEL_AVAILABLE="$value" ;;
+      CACHE) G_OTEL_CACHE_HIT_PCT="$value" ;;
+      MODEL) G_OTEL_MODEL_COSTS+="${value}:\$${amount} " ;;
+    esac
+  done <<< "$parsed"
 }

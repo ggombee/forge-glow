@@ -16,9 +16,7 @@ C_WHITE=$'\033[37m'
 # 컨텍스트 % → 이모지 + 색상
 context_indicator() {
   local pct=$1
-  if [ "$pct" -ge 84 ]; then
-    echo "♻️"
-  elif [ "$pct" -ge 80 ]; then
+  if [ "$pct" -ge 80 ]; then
     echo "💀"
   elif [ "$pct" -ge 70 ]; then
     echo "🔥"
@@ -45,7 +43,10 @@ context_color() {
 # 프로그레스바 렌더링 (20칸)
 progress_bar() {
   local pct=$1
-  local width=20
+  local width=${2:-20}
+  [ "$pct" -lt 0 ] 2>/dev/null && pct=0
+  [ "$pct" -gt 100 ] 2>/dev/null && pct=100
+  [ "$width" -lt 1 ] 2>/dev/null && width=1
   local filled=$(( pct * width / 100 ))
   local empty=$(( width - filled ))
   local color

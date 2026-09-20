@@ -1,79 +1,51 @@
 #!/usr/bin/env bash
 # forge-glow tmux — status-right.sh
-# Claude Code + Codex CLI 최근 활성 세션을 tmux 하단바(status-right)에 표시.
-# shellcheck disable=SC2034  # G_CODEX_* 변수들은 parse-codex.sh가 설정, 이 파일이 소비
-#
-# 사용법: ~/.tmux.conf에 아래 추가
-#   set -g status-right-length 150
-#   set -g status-right "#(/path/to/forge-glow/tmux/status-right.sh)"
-#
-# 출력: 1줄. 두 도구 중 최근 활성된 걸 우선 (mtime 기준 5분 이내).
-# 실패 시 빈 문자열 (tmux가 status-right를 공백으로 표시).
+# 현재 pane의 Codex 계정 표식과 Claude/Codex의 전역 최근 활동 여부를 표시한다.
+# 계정 표식은 launcher가 pane option으로 넘긴 값만 사용한다. 세션 로그를 추측하지 않는다.
 
 set -uo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HUD_DIR="$SCRIPT_DIR/../hud"
+PANE_ID="${1:-}"
+PANE_COMMAND="${2:-${FORGE_GLOW_PANE_COMMAND:-}}"
+CODEX_ACCOUNT="${FORGE_GLOW_CODEX_ACCOUNT:-}"
 
-# ── 최근 활성 도구 감지 (mtime 5분 이내) ──────────────────
-detect_latest() {
-  local claude_dir="$HOME/.claude/projects"
-  local codex_dir="${CODEX_HOME:-$HOME/.codex}/sessions"
-
-  local claude_mtime=0 codex_mtime=0
-
-  if [ -d "$claude_dir" ]; then
-    claude_mtime=$(find "$claude_dir" -name "*.jsonl" -mmin -5 -type f -print0 2>/dev/null \
-      | xargs -0 stat -f "%m" 2>/dev/null | sort -rn | head -1)
-    claude_mtime="${claude_mtime:-0}"
-  fi
-
-  if [ -d "$codex_dir" ]; then
-    codex_mtime=$(find "$codex_dir" -name "*.jsonl" -mmin -5 -type f -print0 2>/dev/null \
-      | xargs -0 stat -f "%m" 2>/dev/null | sort -rn | head -1)
-    codex_mtime="${codex_mtime:-0}"
-  fi
-
-  if [ "$claude_mtime" -gt "$codex_mtime" ]; then
-    echo "claude"
-  elif [ "$codex_mtime" -gt 0 ]; then
-    echo "codex"
-  else
-    echo ""
-  fi
+has_recent_jsonl() {
+  local dir="$1"
+  [ -d "$dir" ] || return 1
+  [ -n "$(find "$dir" -type f -name '*.jsonl' -mmin -5 -print -quit 2>/dev/null)" ]
 }
 
-# ── Codex 정보만 출력 (Claude Code는 statusLine API 사용 권장) ──
-render_codex() {
-  # parse-codex.sh 직접 로드해서 값만 뽑기
-  # shellcheck disable=SC1091
-  source "$HUD_DIR/lib/parse-codex.sh"
-  parse_codex
+CLAUDE_DIR="$HOME/.claude/projects"
+CODEX_DIR="${CODEX_HOME:-$HOME/.codex}/sessions"
+OUTPUT=""
 
-  [ "$G_CODEX_AVAILABLE" != "true" ] && return
+if [ -z "$CODEX_ACCOUNT" ] && [ -n "$PANE_ID" ] && command -v tmux >/dev/null 2>&1; then
+  CODEX_ACCOUNT="$(tmux show-options -p -v -t "$PANE_ID" \
+    @forge_glow_codex_account 2>/dev/null || true)"
+fi
 
-  local out="🤖 codex"
-  [ -n "$G_CODEX_MODEL" ] && out="${out}:${G_CODEX_MODEL}"
-  [ -n "$G_CODEX_COST" ] && out="${out} \$${G_CODEX_COST}"
-  [ -n "$G_CODEX_CTX_PCT" ] && out="${out} ctx:${G_CODEX_CTX_PCT}%"
-  [ "${G_CODEX_TURNS:-0}" -gt 0 ] && out="${out} turns:${G_CODEX_TURNS}"
+CODEX_ACCOUNT_LABEL=""
+case "$CODEX_ACCOUNT" in
+  personal) CODEX_ACCOUNT_LABEL="개인" ;;
+  company) CODEX_ACCOUNT_LABEL="회사" ;;
+esac
 
-  echo "$out"
-}
-
-# ── 메인 ──────────────────────────────────────────────────
-LATEST=$(detect_latest)
-
-case "$LATEST" in
-  codex)
-    render_codex
-    ;;
-  claude)
-    # Claude Code는 자체 statusLine을 쓰므로 tmux엔 간단 표시만
-    echo "🧠 claude (statusLine 참조)"
-    ;;
-  *)
-    # 최근 활동 없음
-    echo ""
+case "$PANE_COMMAND" in
+  codex*)
+    if [ -n "$CODEX_ACCOUNT_LABEL" ]; then
+      OUTPUT="👤 codex:${CODEX_ACCOUNT_LABEL}"
+    fi
     ;;
 esac
+
+if [ -z "$OUTPUT" ] && has_recent_jsonl "$CODEX_DIR"; then
+  OUTPUT="🌐 codex active (native status line 참조)"
+fi
+if has_recent_jsonl "$CLAUDE_DIR"; then
+  [ -n "$OUTPUT" ] && OUTPUT+="  "
+  OUTPUT+="🧠 claude active (statusLine 참조)"
+fi
+
+printf '%s\n' "$OUTPUT"
+
+exit 0

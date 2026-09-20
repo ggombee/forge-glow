@@ -39,24 +39,32 @@ jobs:
 
       - name: Validate JSON files
         run: |
-          for f in .claude-plugin/plugin.json hud/config.json docs/grafana-dashboard.json; do
+          for f in \
+            .claude-plugin/plugin.json \
+            .claude-plugin/marketplace.json \
+            .agents/plugins/marketplace.json \
+            plugins/forge-glow/.codex-plugin/plugin.json; do
             echo "Validating $f"
             python3 -m json.tool "$f" > /dev/null || { echo "INVALID: $f"; exit 1; }
           done
           echo "All JSON valid"
 
-      - name: Adapter exec permission check
+      - name: Release surface consistency
+        run: bash tools/check-release.sh
+
+      - name: Plugin manager dry run
         run: |
-          ERRORS=0
-          for adapter in hud/adapters/*.sh; do
-            [ -f "$adapter" ] || continue
-            if [ ! -x "$adapter" ]; then
-              echo "NOT EXECUTABLE: $adapter"
-              ERRORS=$((ERRORS+1))
-            fi
-          done
-          [ $ERRORS -eq 0 ] && echo "All adapters executable"
-          exit $ERRORS
+          FORGE_GLOW_DRY_RUN=1 bash tools/plugin-manager.sh install all
+          FORGE_GLOW_DRY_RUN=1 bash tools/plugin-manager.sh update all
+
+      - name: HUD and parser regression tests
+        run: bash test/parity/run.sh
+
+      - name: Install and uninstall regression tests
+        run: bash test/install/run.sh
+
+      - name: Python syntax
+        run: python3 -m compileall -q stats/src
 
       - name: self-update dry run (no remote)
         run: |
