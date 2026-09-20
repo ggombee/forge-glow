@@ -39,7 +39,7 @@ for f in "$FIX"/*.json; do
   [ "$name" = "claude-narrow" ] && hud_columns=80
   out="$(COLUMNS="$hud_columns" CODEX_HOME="$TMP_CODEX" \
     FORGE_GLOW_OTEL_LOG="$TMP_CODEX/no-otel.jsonl" \
-    FORGE_GLOW_STATE_DIR="$TMP_CODEX/state" FORGE_GLOW_SLACK_WEBHOOK= \
+    FORGE_GLOW_STATE_DIR="$TMP_CODEX/state" FORGE_GLOW_SLACK_WEBHOOK='' \
     FORGE_GLOW_COST=1 bash "$HUD" < "$f" 2>/dev/null)"
   if [ "$MODE" = "update" ]; then
     printf '%s\n' "$out" > "$GOLD/$name.txt"
@@ -79,7 +79,7 @@ if [ -f "$CODEX_FIX" ] && [ -f "$CODEX_STDIN" ]; then
   touch "$TMP_CODEX/sessions/rollout-codex.jsonl"
   out="$(COLUMNS=160 CODEX_HOME="$TMP_CODEX" \
     FORGE_GLOW_OTEL_LOG="$TMP_CODEX/no-otel.jsonl" \
-    FORGE_GLOW_STATE_DIR="$TMP_CODEX/state" FORGE_GLOW_SLACK_WEBHOOK= \
+    FORGE_GLOW_STATE_DIR="$TMP_CODEX/state" FORGE_GLOW_SLACK_WEBHOOK='' \
     FORGE_GLOW_COST=1 bash "$HUD" < "$CODEX_STDIN" 2>/dev/null)"
   if [ "$MODE" = "update" ]; then
     printf '%s\n' "$out" > "$GOLD/codex-active.txt"
@@ -147,7 +147,7 @@ done
 # 깨진 stdin도 기본 HUD로 내려가야 하며 set -u로 중단되면 안 된다.
 fallback_out="$(printf '{broken' | COLUMNS=80 \
   FORGE_GLOW_OTEL_LOG="$TMP_CODEX/no-otel.jsonl" \
-  FORGE_GLOW_STATE_DIR="$TMP_CODEX/state" FORGE_GLOW_SLACK_WEBHOOK= \
+  FORGE_GLOW_STATE_DIR="$TMP_CODEX/state" FORGE_GLOW_SLACK_WEBHOOK='' \
   bash "$HUD" 2>/dev/null)"
 if printf '%s\n' "$fallback_out" | grep -q '^🧠 ?  📁 ?  💰 ~\$0.00$'; then
   echo "✓ fallback: malformed stdin"
