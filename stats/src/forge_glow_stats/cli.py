@@ -15,7 +15,7 @@ from .parsers import build_snapshot
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="forge-glow-stats",
-        description="Dashboard for Claude Code + Codex CLI efficiency",
+        description="Aggregate dashboard for recent Claude Code telemetry",
     )
     parser.add_argument("--version", action="version", version=f"forge-glow-stats {__version__}")
     parser.add_argument("--refresh", type=float, default=5.0,
@@ -48,13 +48,8 @@ def main(argv: list[str] | None = None) -> int:
                 "cache_hit_rate": snap.cache_hit_rate,
                 "otel_available": snap.otel_available,
                 "update_available_reason": snap.update_available_reason,
-                "codex_active": snap.codex_active,
-                "codex_model": snap.codex_model,
-                "codex_cost_usd": snap.codex_cost,
                 "models": {k: asdict(v) for k, v in snap.models.items()},
                 "tools_used": snap.tools_used,
-                "forge_agents": snap.forge_agents,
-                "forge_skills": snap.forge_skills,
             }
         }
         if args.org:

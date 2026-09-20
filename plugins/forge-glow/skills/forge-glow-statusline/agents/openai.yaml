@@ -1,0 +1,4 @@
+interface:
+  display_name: "Forge Glow Statusline"
+  short_description: "Configure and verify the Codex session statusline"
+  default_prompt: "Use $forge-glow-statusline to configure my Codex session statusline safely."

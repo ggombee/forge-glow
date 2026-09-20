@@ -1,245 +1,113 @@
-# forge-glow — 로드맵
+# forge-glow 로드맵
 
-## 비전
+## 현재 목표
 
-Claude Code + Codex CLI 사용자를 위한 **실시간 효율성 HUD + 멀티모델 분석 대시보드**.
+Claude Code와 Codex의 **각 세션이 자기 컨텍스트만 표시**하게 한다.
+통합 대시보드와 세션 HUD를 구분하고, 추측한 세션 ID나 시세가 내장된
+비용을 확정값처럼 표시하지 않는다.
 
-"대장장이가 불빛 색으로 철의 상태를 읽듯이, 개발자는 HUD 색으로 AI 세션의 상태를 읽는다."
+## 완료된 기반
 
----
+- [x] Claude statusLine stdin에서 모델, 레포/브랜치, context, 비용, rate limit 수집
+- [x] 현재 `transcript_path`의 nested `message.content[].tool_use` 집계
+- [x] 반복 assistant 레코드를 `message.id`로 중복 제거
+- [x] 모델별 비용은 `~` 추정값으로 표시
+- [x] `COLUMNS` 100 미만 터미널에서 context bar/도구 요약 축소
+- [x] 근거 없는 auto-compact 시점 표기를 제거하고 임계값을 경고 용도로 한정
+- [x] OTel file exporter의 OTLP/JSON envelope 파싱
+- [x] OTel event를 현재 `session.id`로 격리
+- [x] Slack alert 쿨다운 상태도 현재 `session_id`별로 격리
+- [x] Codex native `tui.status_line` 설정 가이드
+- [x] Claude HUD에서 전역 Codex 로그 결합 제거
+- [x] tmux는 세션 값 대신 전역 활동 여부만 표시
+- [x] 다른 status line을 플러그인 훅이 자동 래핑하지 않도록 충돌 처리
+- [x] 전역 설치 여부만 보던 어댑터 계층 제거
+- [x] 로컬 Claude 로그 집계용 Python dashboard/workflow 패널
+- [x] golden render, Codex 누수, flat/OTLP OTel 세션 격리 회귀 테스트
 
-## Phase 1 — statusLine MVP ✅ (완료)
+## 설계 경계
 
-Claude Code statusLine API에 붙는 기본 HUD.
+| 기능 | source of truth | 범위 |
+|---|---|---|
+| Claude HUD | Claude statusLine stdin + 현재 transcript | 현재 Claude 세션 |
+| Claude OTel 보강 | 현재 stdin `session_id`와 같은 event | 현재 Claude 세션 |
+| Codex HUD | Codex native status line | 현재 Codex 세션 |
+| Codex 앱/IDE/API 호스트 | custom TUI footer 미지원 | HUD 주입 안 함 |
+| tmux summary | 최근 로그 mtime | 전역 활동 여부만 |
+| Python dashboard | 최근 로컬 로그 | 집계 분석, 세션 HUD 아님 |
 
-- [x] `hud/statusline.sh` — stdin JSON 파싱 + 렌더링
-- [x] `hud/lib/parse-stdin.sh` — L1 데이터 계층
-- [x] `hud/lib/render.sh` — 색상, 프로그레스바, 이모지
-- [x] `hud/config.json` — 임계값 설정
-- [x] `install.sh` / `uninstall.sh` — settings.json 자동 등록
+## 다음 개선 우선순위
 
-**표시 내용:**
-- 모델, 프로젝트/브랜치, 세션 비용 (시간당)
-- 컨텍스트 사용률 프로그레스바 (🧊→⚠️→🔥→💀)
-- 코드 변경량 (+156 -23)
-- Rate limit (5h/7d)
+### P1 — 정확성과 회귀
 
----
+- [ ] 실제 Claude transcript에서 익명화한 스키마 fixture를 더 추가
+- [ ] 모델 가격표를 코드에서 분리하고 갱신일/출처 메타데이터 표시
+- [ ] fast mode, 1h cache write, data residency 가격 보정 fixture
+- [ ] OTel rotation 파일을 포함한 세션 누적 집계 테스트
 
-## Phase 2 — transcript 파싱 + 효율성 지표 ✅ (완료)
+### P2 — 렌더링과 성능
 
-**목표:** 모델별 비용 분리, 캐시 히트율, 낭비 패턴 감지.
+- [ ] 터미널 `COLUMNS`에 따라 프로젝트/브랜치 안전 줄임 처리
+- [ ] 60/80/100/160칸 golden snapshot 테스트
+- [ ] 대용량 transcript/OTLP 기준 p50/p95 벤치마크를 CI에 추가
+- [ ] 현재 `tail -N` 스냅샷을 byte offset cache로 바꾸는 것이 실제로 이득인지 측정
 
-- [x] `hud/lib/parse-transcript.sh` 완성
-- [x] 도구 사용 집계 (Edit×4 Read×12 Bash×3)
-- [x] 실행중인 서브에이전트 감지 (tool_use name=Agent 추적)
-- [x] 모델별 비용 분리 (assistant 레코드의 model + usage 필드)
-- [x] 캐시 히트율 계산 (cache_read / total_input)
-- [x] **낭비 감지 경고**:
-  - opus에서 단순 Read 5회 연속 → haiku 권장
-  - Read 결과 > 2000 tokens → Grep 추천
-  - cache miss 3턴 연속 → /compact 타이밍 조정
-- [x] 3줄째 동적 전환 (평상시 통계 / 경고 시 액션 가이드)
+### P3 — 설치/운영
 
----
+- [x] install/uninstall을 임시 HOME/settings.json으로 통합 테스트
+- [x] 플러그인 캐시 경로 변경과 다른 HUD 충돌 fixture
+- [ ] Windows/Git Bash에서 CRLF, `stat`, ANSI width 검증
+- [x] 사용자가 직접 편집한 status line 옵션을 플러그인 훅이 보존하는지 검증
+- [x] 직접 설치본과 활성 marketplace 캐시의 경로 충돌 진단
+- [x] Codex CLI TUI와 앱/IDE/API 호스트의 지원 범위 명시
+- [x] Claude 직접 marketplace와 Codex repo marketplace 동시 배포 구조
+- [x] 두 plugin manifest와 패키지 버전의 release-time 동기화 검사
+- [x] Claude/Codex 설치·업데이트·상태 확인 통합 명령
+- [ ] clean Python 3.8/3.11 환경에서 sdist/wheel 빌드·설치 검증
+- [ ] v0.9.0 release tarball SHA 반영 후 `brew audit --strict` 검증
 
-## Phase 3 — code-forge 강화 (L3) ✅ (완료, v4.2.0+)
+## 비판적 평가
 
-**목표:** code-forge 사용자에게 전용 메트릭 제공.
+1. **두 제품의 HUD가 시각적으로 같지 않다.** Claude는 외부 command의 멀티라인
+   렌더링을 허용하지만 Codex는 native built-in field만 제공한다. 현재 구조는 세션
+   정확성은 지키지만, “동일 HUD”라는 기대를 만들면 제품 경험이 어긋난다.
+2. **Claude plugin의 첫 SessionStart가 사용자 전역 `settings.json`을 수정한다.**
+   기존 HUD는 보존하고 lock/atomic rename을 쓰지만, 설치 동작이 표시 설정 변경까지
+   포함된다는 사실을 더 명확히 보여줘야 한다.
+3. **비용·모델별 분해는 추정치다.** 총 context와 rate limit은 호스트 입력을
+   따르지만 transcript 가격 계산은 모델명 정규화와 가격표 최신성에 민감하다.
+4. **현재 성능 수치는 작은 fixture 중심이다.** refresh마다 shell/jq가 실행되고
+   transcript tail을 다시 파싱하므로 긴 세션과 느린 디스크의 p95는 아직 보장하지 못한다.
+5. **업데이트 확인과 실행 중 반영은 다르다.** Claude는 auto-update가 가능하지만
+   reload가 필요하고, Codex는 marketplace snapshot 갱신과 새 세션이 필요하다. 이를
+   숨기고 “즉시 hot update”로 표현하면 잘못된 약속이 된다.
 
-- [x] `bellows-log.sh` v2 필드 (`model`, `session_id`, `duration_ms`, `success`) — code-forge 본체 반영
-- [x] `bellows-log.sh` v2.5 — `agent_end` 이벤트 (SubagentStop 훅에서 transcript ts 기반 duration 계산)
-- [x] `quality-gate.sh` → `.claude/state/quality.jsonl` 로깅 — code-forge 본체 반영
-- [x] `hud/lib/parse-forge.sh` — `bin/forge status --json` surface 경유 (계약 준수)
-- [x] code-forge 감지 시 자동 L3 활성화
-- [x] 3줄째에 에이전트/스킬 통계 + 게이트 통과율 표시
+## 개선 실행 순서
 
----
-
-## Phase 4 — 어댑터 패턴 (L4) ✅ (완료)
-
-**목표:** 다른 하네스 플러그인 지원.
-
-- [x] `hud/adapters/` 디렉토리 자동 스캔 (statusline.sh)
-- [x] `adapters/omc.sh` — oh-my-claudecode 지원
-- [x] `adapters/ecc.sh` — everything-claude-code 지원
-- [x] `adapters/harness.sh` — claude-code-harness 지원
-- [x] 어댑터 작성 가이드 (`CONTRIBUTING.md`)
-- [x] statusLine 충돌 해결 UI — `install.sh`의 교체/래핑/취소 3택
-
----
-
-## Phase 5 — Codex CLI + Standalone TUI
-
-**목표:** Claude Code + Codex CLI 통합. 별도 TUI 대시보드.
-
-### 5-1. Codex CLI 데이터 파싱 ✅ (완료)
-
-- [x] `hud/lib/parse-codex.sh` — `~/.codex/sessions/**/*.jsonl` 파싱
-- [x] `turn.completed.usage.*` (input/cached/output_tokens) 사용 — 누적 델타 아님 (2026 Q1+ 표준)
-- [x] 모델 자동 감지 (`turn_context.model`)
-- [x] 비용 계산 (gpt-5/o3/mini/gpt-4.1 가격표 내장)
-- [x] Windows `token_count` 버그 fallback
-
-### 5-2. tmux 통합 ✅ (완료)
-
-- [x] `tmux/status-right.sh` — Claude + Codex 통합 상태
-- [x] 최근 활성 세션 자동 감지 (mtime 5분)
-- [x] tmux 설정 가이드 (`docs/tmux-setup.md`)
-- [x] 비tmux 환경 대안 (starship, zsh RPROMPT)
-
-### 5-3. Standalone 대시보드 ✅ (v0.5.0 — Python rich)
-
-`forge-glow stats` 명령으로 멀티 도구 통합 분석 뷰.
-
-```
-┌─ Token Dashboard ────────────────────────────────────┐
-│ Today: $8.42  │  Week: $41.20  │  Month: $156.80    │
-│                                                       │
-│ ┌─ By Model ──────────────────────────────────────┐ │
-│ │ claude-opus-4-6    $3.20  ████████░░  38%       │ │
-│ │ claude-sonnet-4-6  $4.10  ██████████  49%       │ │
-│ │ claude-haiku-4-5   $0.52  █░░░░░░░░░  6%        │ │
-│ │ gpt-4.1 (codex)    $0.60  █░░░░░░░░░  7%        │ │
-│ └─────────────────────────────────────────────────┘ │
-│                                                       │
-│ ┌─ Efficiency ────────────────────────────────────┐ │
-│ │ Cache Hit Rate:  87% ████████░░  (목표: >80%)   │ │
-│ │ Avg $/task:      $1.20           (업계: $6)     │ │
-│ │ Context Resets:  3회/일          (권장: <5)     │ │
-│ │ Haiku Delegation: 42%           (권장: >40%)   │ │
-│ └─────────────────────────────────────────────────┘ │
-│                                                       │
-│ ┌─ Savings Tips ──────────────────────────────────┐ │
-│ │ 💡 어제 opus로 단순 Read 47회 — haiku면 $2.1 절약│ │
-│ │ 💡 cache miss 3회 연속 — /compact 타이밍 조정   │ │
-│ └─────────────────────────────────────────────────┘ │
-└───────────────────────────────────────────────────────┘
-```
-
-**구현: Python + rich** (의존성 최소 — `pip install rich requests`). textual 풀 TUI 대신 rich Live + Columns 레이아웃.
-
-**기능:**
-- [x] 모델별 비용/토큰 테이블 (L5 우선, L2 fallback)
-- [x] 도구 활동 집계
-- [x] code-forge 에이전트/스킬 집계 (L3)
-- [x] 절약 팁 자동 생성 (rule-based)
-- [x] JSON 내보내기 (`--json`)
-- [x] `--once` 1회 렌더 / `--refresh N` 자동 갱신
-- [x] Codex 병렬 세션 표시
-- [x] update-available 알림 통합
-- [ ] 리더보드 (후속)
-
----
-
-## Phase 6 — OTel / 관찰성 (L5 신설, 2026-04 리서치 반영)
-
-### 6-1. OTel 연동 ✅ (기본 완료, v0.2.0)
-
-- [x] `parse-otel.sh` L5 레이어 — `claude_code.api_request`/`tool_result` 이벤트 소비
-- [x] L5 활성 시 L2 근사값을 정확값으로 덮어쓰기
-- [x] `docs/otel-setup.md` — Collector file exporter 가이드
-- [x] `CLAUDE_CODE_ENABLE_TELEMETRY=1` + `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1` 활성화 가이드
-- [x] Grafana 대시보드 템플릿 (`docs/grafana-dashboard.json` + `docs/grafana-setup.md`) — 5패널
-- [x] Admin Analytics API 연동 (`stats/.../admin.py`, `--org` 플래그) — `/v1/organizations/usage_report/claude_code`
-
-### 6-2. 실시간 알림 ✅ (v0.4.0)
-
-- [x] 컨텍스트 ≥80% 경고 (statusline 3줄째 치환)
-- [x] 시간당 비용 ≥$5 경고
-- [x] rate limit ≥80% 경고
-- [x] Slack webhook opt-in (`FORGE_GLOW_SLACK_WEBHOOK` 환경변수)
-- [x] 쿨다운 중복 제어 (`FORGE_GLOW_ALERT_COOLDOWN` 기본 600초)
-- [x] update-available HUD 표시 (self-update가 dirty/로컬커밋으로 스킵 시)
-
-### 6-3. 배포 파이프라인 ⚠️ (코드 완성, 실제 배포는 deferred)
-
-- [x] `Formula/forge-glow.rb` — Homebrew formula (쉘 본체 + wrapper `forge-glow` 명령)
-- [x] PyPI 배포 준비 — `stats/pyproject.toml` (name: `forge-glow-stats`)
-- [x] GitHub Release 자동화 — `.github/workflows/release.yml` (tag 푸시 시 tar.gz + sha256 업로드 + PyPI upload opt-in)
-- [x] `tools/metrics-report.sh` — 주간 사용 메트릭 리포트
-
-**실제 배포 활성화는 [docs/future-ideas.md](docs/future-ideas.md)** — 현 단계에선 git clone + install.sh로 충분.
-
-참고: OTel / Slack / Admin Analytics / 실제 PyPI·Homebrew tap 업로드 역시 모두 **opt-in 후속**.
-
----
-
-## Phase 7 — 워크플로우 통합 (작업 흐름 + 하네싱) 🚧 (진행 중)
-
-**목표:** 효율성 메트릭과 작업 컨텍스트(현재 sub-task, 결정 누적, 빌드 히스토리, 미결정 Q)를 한 화면에 통합. "지금 어떤 작업을 어떤 모델로 얼마 들여 어떤 도구 chain으로 진행 중이고, 다음은 뭔지" 단일 진입점.
-
-### 7-1. 워크플로우 패널 ✅ (코드 완성)
-
-- [x] `stats/src/forge_glow_stats/workflow.py` — config loader + 셀렉터 파서 + WorkflowSnapshot
-- [x] `dashboard.py`에 `_workflow_panel` 추가 — 현재/다음 items + 미결정 Q + 결정 누적 + 빌드 + 브랜치
-- [x] tracker-agnostic 데이터 모델 (`jira` / `github-issues` / `linear` / `custom`)
-- [x] Config 자동 감지: `$WORKFLOW_CONFIG_PATH` → `~/.forge-glow/workflow.json`
-- [x] CLI: `--workflow` / `--no-workflow` 플래그 + `--json` 통합
-
-### 7-2. progress 문서 셀렉터 + 프리셋 ✅ (코드 완성)
-
-- [x] `presets/progress/decision-log.json` — D-log + 미결정 Q 표 형식
-- [x] `presets/progress/simple-todo.json` — `- [ ]` 체크박스
-- [x] `presets/progress/kanban-md.json` — TODO/DOING/DONE bullet
-- [x] 사용자 정의 셀렉터 (`progress.selectors` — section regex + format: `table` | `checkbox` | `bullet`)
-- [x] placeholder row 자동 스킵 (`(없음)` / `—` / `N/A`)
-
-### 7-3. statusLine 워크플로우 표시 (후속)
-
-- [ ] 3줄째 또는 2줄째 일부에 현재 sub-task ID/title 표시
-- [ ] config: `~/.forge-glow/workflow.json` 의 `items[kind=current]` 자동 추출
-
-### 7-4. 자매 도구 호환 ✅
-
-- [x] markdown 출력 Node CLI(별도 도구)와 동일 sources v2 schema 공유
-- [x] 사용자 가이드 (`docs/workflow-setup.md`)
-- [ ] schema JSON Schema 문서 + Python/Node fixture 정합성 테스트
-
-### 7-5. 데이터 절연
-
-- [x] 회사/내부 식별자는 코드/예시/README에 0건 (사용자 `~/.forge-glow/workflow.json`에만 존재)
-- [x] 예시 데이터(`examples/workflow.example.json`)는 `EXAMPLE-*`, `octocat/hello-world`만 사용
-- [x] 회사 키워드 grep 검증 통과
-
----
-
-## 기술 스택 결정 사항
-
-| 영역 | 선택 | 이유 |
-|------|------|------|
-| 쉘 HUD | Bash + jq + bc | 의존성 최소화, Claude Code statusLine 표준 |
-| TUI 앱 | 미정 (Phase 5) | Node.js(ink) vs Rust(ratatui) 비교 필요 |
-| 파싱 | `tail -N` + `jq` | 대용량 transcript도 안전 |
-| 색상 | ANSI-C quoting (`$'\033[32m'`) | POSIX 호환 |
-| 설정 | JSON | 모든 도구에서 읽기 쉬움 |
-
----
+- **P0:** CI의 `tools/check-release.sh`/manifest 검사를 필수 gate로 유지하고,
+  release candidate는 Claude marketplace와 Codex plugin 공식 validator도 통과시킨다.
+- **P0:** 설치 문구와 진단 출력에서 현재 host가 CLI TUI인지 먼저 구분하고,
+  non-TTY에서는 HUD가 보이지 않는 이유를 즉시 제시한다.
+- **P1:** 가격표를 데이터 파일로 분리하고 출처·갱신일·confidence를 HUD/진단에 노출한다.
+- **P1:** 60/80/100/160칸과 10MB 이상 transcript/OTel fixture로 렌더 정확도와
+  p95 성능을 CI에서 측정한다.
+- **P2:** Claude 설정 변경을 install/configure 단계로 더 분리하고, plugin manager가
+  공식 설정 API를 제공하면 SessionStart의 직접 파일 수정을 교체한다.
+- **P2:** Codex가 custom renderer 또는 자동 marketplace 갱신을 공식 지원할 때만
+  native footer 이상의 시각적 parity/자동 반영을 추가한다.
 
 ## 성능 예산
 
-| 작업 | 목표 시간 |
-|------|----------|
-| statusLine 전체 렌더링 | < 100ms |
-| transcript 파싱 (tail -500) | < 30ms |
-| 모델별 비용 집계 | < 20ms |
-| TUI 초기 로딩 | < 500ms |
+| 경로 | 목표 |
+|---|---:|
+| transcript 없음 | p95 < 75ms |
+| transcript 500줄 | p95 < 100ms |
+| OTel 활성 | p95 < 150ms |
 
----
+2026-08-18 로컬 smoke baseline은 transcript 없음 p95 42.8ms, 실제 transcript
+tail 500 p95 43.1ms, OTLP fixture p95 47.4ms였습니다. 각각 20~30회 측정값이며
+CI의 대용량 부하 벤치마크를 대신하지는 않습니다.
 
-## 참고 프로젝트
-
-| 프로젝트 | URL | 참고 포인트 |
-|---------|-----|-----------|
-| claude-status-bar | https://github.com/kangraemin/claude-status-bar | 쉘 기반 statusLine 기본 |
-| claude-hud | https://github.com/jarrodwatts/claude-hud | TS, transcript 파싱, 프리셋 |
-| tokscale | https://github.com/junhoyeo/tokscale | Rust TUI, 멀티 도구 통합 |
-| ccusage | https://github.com/ryoppippi/ccusage | JSONL 파싱, 일별 집계 |
-
----
-
-## 라이선스 / 배포
-
-- MIT
-- 개인 GitHub 레포로 공개
-- 마켓플레이스 등록은 Phase 5 이후 검토
+새로 등록한 status line은 Claude 이벤트 즉시 갱신 + 15초 refresh를 사용합니다.
+기존 설치의 refresh/padding 사용자 옵션은 그대로 보존합니다. 성능을 높이려고 세션
+격리나 표시 정확성을 포기하지 않습니다.

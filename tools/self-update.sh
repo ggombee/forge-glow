@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # forge-glow — self-update.sh
-# 안전한 자동 업데이트 (Codex+Claude 합의 설계, 2026-04)
+# 개발용 Git clone의 안전한 자동 업데이트
 #
 # 3중 안전 가드:
 #   1. clean tree — `git diff` 비어있을 때만

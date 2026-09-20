@@ -14,6 +14,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Verify release surfaces and tag
+        run: bash tools/check-release.sh
+
       - name: Determine tag
         id: tag
         run: echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
@@ -23,7 +26,12 @@ jobs:
           TAG="${{ steps.tag.outputs.tag }}"
           mkdir -p dist
           git archive --format=tar.gz --prefix="forge-glow-${TAG#v}/" "$TAG" > "dist/forge-glow-${TAG#v}.tar.gz"
-          (cd dist && shasum -a 256 "forge-glow-${TAG#v}.tar.gz" | tee "forge-glow-${TAG#v}.tar.gz.sha256")
+          PLUGIN_STAGE="$(mktemp -d)"
+          git archive --format=tar "$TAG" plugins/forge-glow | tar -xf - -C "$PLUGIN_STAGE"
+          tar -czf "dist/forge-glow-codex-plugin-${TAG#v}.tar.gz" -C "$PLUGIN_STAGE/plugins" forge-glow
+          for archive in dist/*.tar.gz; do
+            shasum -a 256 "$archive" > "${archive}.sha256"
+          done
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

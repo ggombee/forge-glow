@@ -4,13 +4,10 @@
 # shellcheck disable=SC2034  # G_ALERT_* 변수들은 statusline.sh가 sourcing 후 사용
 #
 # 입력 (다른 parse-*.sh에서 설정됨):
-#   G_CTX_PCT_INT       — L1 컨텍스트 %
-#   G_COST_PER_HOUR     — L1 시간당 비용
-#   G_RATE_5H, G_RATE_7D — L1 rate limit %
-#   G_OTEL_AVAILABLE / G_OTEL_MODEL_COSTS — L5 (있으면 정확값 선호)
+#   G_CTX_PCT_INT — 현재 Claude 세션 context %
 #
 # 출력:
-#   G_ALERT_TEXT — statusLine 3줄째에 얹을 경고 (비어있으면 기존 G_WASTE_WARN 유지)
+#   G_ALERT_TEXT — statusLine 3줄째에 얹을 경고
 #
 # 환경변수 (opt-in):
 #   FORGE_GLOW_SLACK_WEBHOOK — Slack incoming webhook URL
@@ -23,11 +20,11 @@ detect_alerts() {
 
   # 컨텍스트 임계 (80% 이상 = 💀)
   if [ -n "${G_CTX_PCT_INT:-}" ] && [ "$G_CTX_PCT_INT" -ge 80 ] 2>/dev/null; then
-    alerts+=("ctx:${G_CTX_PCT_INT}% auto-compact 임박 → /handoff")
+    alerts+=("ctx:${G_CTX_PCT_INT}% 사용 → 정리/새 세션 검토")
   fi
 
-  # cost/rate 경고는 제거 (2026-06-12 사용자 결정 — HUD 중복):
-  #  - cost: LINE1 비용 아이콘이 $5/h 이상에서 🚨로 자체 에스컬레이션 + ($X/h) 숫자 상시 표시
+  # cost/rate 경고는 HUD의 기존 아이콘과 중복되므로 별도 알림에서 제외:
+  #  - cost: LINE1 비용 아이콘이 평균 $5/h 이상에서 🚨로 자체 에스컬레이션
   #  - rate: LINE3 ⏱ 표시가 60%↑ ⚠️ / 80%↑ 🔴로 자체 에스컬레이션
   #  경고의 LINE3 전체 교체가 ⏱ 5h/7d를 영구히 가리던 부작용도 함께 해소 (statusline.sh 보존 로직 참조).
   #  부수효과: cost/rate는 Slack 전파 대상에서도 빠짐 (ctx 경고만 전파 — opt-in webhook).
@@ -52,7 +49,11 @@ push_slack_alert() {
   [ -z "$msg" ] && return
 
   local state="${FORGE_GLOW_STATE_DIR:-$HOME/.forge-glow}"
-  local stamp="$state/alert-last-sent"
+  local session_key
+  session_key=$(printf '%s' "${G_SESSION_ID:-unknown}" | cksum | awk '{print $1}')
+  session_key="${session_key:-unknown}"
+  local stamp="$state/alert-${session_key}-last-sent"
+  local last_msg_file="$state/alert-${session_key}-last-msg"
   local cooldown="${FORGE_GLOW_ALERT_COOLDOWN:-600}"
 
   mkdir -p "$state" 2>/dev/null
@@ -64,7 +65,7 @@ push_slack_alert() {
 
   # 같은 메시지면 스킵
   local last_msg
-  last_msg=$(cat "$state/alert-last-msg" 2>/dev/null || echo "")
+  last_msg=$(cat "$last_msg_file" 2>/dev/null || echo "")
   [ "$last_msg" = "$msg" ] && return
 
   # background curl — statusLine 블로킹 금지
@@ -77,5 +78,5 @@ push_slack_alert() {
   ) &
 
   echo "$now" > "$stamp"
-  echo "$msg" > "$state/alert-last-msg"
+  echo "$msg" > "$last_msg_file"
 }

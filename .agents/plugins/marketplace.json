@@ -1,0 +1,20 @@
+{
+  "name": "forge-glow",
+  "interface": {
+    "displayName": "Forge Glow"
+  },
+  "plugins": [
+    {
+      "name": "forge-glow",
+      "source": {
+        "source": "local",
+        "path": "./plugins/forge-glow"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

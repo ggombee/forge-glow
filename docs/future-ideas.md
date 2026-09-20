@@ -1,7 +1,8 @@
 # 향후 고려 기능 (현재 활성화 불필요)
 
-코드는 모두 작성돼 있지만 **실사용자 확대 / 팀 도입 / 배포 시점에만 의미**가 있는 기능들.
-혼자 `git clone → install.sh`로 쓰는 지금 단계에선 아무것도 켤 필요 없음.
+Claude/Codex plugin marketplace 배포 경로는 현재 저장소 안에 구성되어 있습니다.
+아래는 **실사용자 확대 / 팀 도입 이후에만 의미**가 있는 추가 배포 채널과 운영 기능입니다.
+plugin 설치·업데이트 자체는 [플러그인 배포 문서](plugin-distribution.md)를 사용합니다.
 
 ---
 
@@ -39,27 +40,28 @@
 
 ---
 
-## 3. OTel L5 레이어 활성화
+## 3. OTel 모델별 추정값 보강
 
-**뭐:** Claude Code가 OpenTelemetry로 내보내는 **Anthropic 계산 정확값**(`cost_usd`, `duration_ms`) 수집.
+**뭐:** Claude Code가 OpenTelemetry logs/events로 내보내는 모델별
+`cost_usd`와 캐시 토큰 **추정값** 수집.
 
 **필요 조건:**
-- [ ] `CLAUDE_CODE_ENABLE_TELEMETRY=1` + `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1`
+- [ ] `CLAUDE_CODE_ENABLE_TELEMETRY=1` + `OTEL_LOGS_EXPORTER=otlp`
 - [ ] OTel Collector 설치 (`brew install opentelemetry-collector-contrib`)
 - [ ] `~/.forge-glow/otel-config.yaml` 작성 (file exporter)
 - [ ] collector 상시 백그라운드 실행
 
 **지금 언제 필요:**
-- L2 가격표 근사값이 실제 청구서와 눈에 띄게 차이 날 때
-- 정확한 세션별 `cost_usd` 리포트 필요할 때
+- transcript 가격표 근사보다 모델별 event 기준이 필요할 때
+- 세션별 요청 지연/캐시 분석이 필요할 때
 
-**방치해도:** `parse-transcript.sh`가 가격표로 근사 계산. 현재 오차 <5% 수준으로 충분.
+**방치해도:** `parse-transcript.sh`가 가격표로 근사하며 `~`로 표시.
 
 ---
 
-## 4. Slack 알림 (Phase 6-2 원격 푸시)
+## 4. Slack 알림
 
-**뭐:** 컨텍스트 80%↑ / 시간당 비용 $5↑ / rate limit 80%↑ 시 Slack 채널로 webhook 전송.
+**뭐:** 컨텍스트 80%↑ 경고를 Slack 채널로 webhook 전송.
 
 **필요 조건:**
 - [ ] Slack workspace incoming webhook URL 발급
@@ -67,7 +69,7 @@
 
 **지금 언제 필요:**
 - 긴 작업 돌려놓고 자리 비울 때 원격 감시
-- 팀에서 비용 폭증 공지할 때
+- context 임계 도달을 원격으로 확인할 때
 
 **방치해도:** 경고 자체는 statusLine 3줄째에 그대로 뜸(🚨). 웹훅만 안 보내는 것.
 
@@ -91,7 +93,7 @@
 
 ---
 
-## 6. Standalone Rust/Node TUI (Phase 5-3 대체안)
+## 6. Standalone Rust/Node TUI 대체안
 
 현재 Python rich 대시보드로 대체 완료. 더 고성능·단일 바이너리 원하면 나중에:
 
@@ -106,8 +108,6 @@
 
 | 기능 활성화하려면 | 참조 |
 |------------------|------|
-| OTel L5 | `docs/otel-setup.md` |
-| Grafana 대시보드 | `docs/grafana-setup.md` |
+| OTel 보강 | `docs/otel-setup.md` |
 | Homebrew tap 배포 | `Formula/README.md` |
 | PyPI 배포 | `stats/pyproject.toml` + `.github/workflows/release.yml` |
-| 주간 메트릭 수집 | `tools/metrics-report.sh` |

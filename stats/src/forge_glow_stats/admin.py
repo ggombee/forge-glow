@@ -1,4 +1,4 @@
-"""Phase 6-1: Admin Analytics API 통합.
+"""Anthropic Admin Analytics API 통합.
 
 /v1/organizations/usage_report/claude_code 호출 → 조직 단위 일별 usage.
 requests 의존.

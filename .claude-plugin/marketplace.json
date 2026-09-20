@@ -1,0 +1,16 @@
+{
+  "name": "forge-glow",
+  "owner": {
+    "name": "ggombee"
+  },
+  "description": "Session-local HUD and diagnostics for Claude Code, with Codex CLI status-line setup.",
+  "plugins": [
+    {
+      "name": "forge-glow",
+      "description": "Display the current Claude Code session without merging another session's context, and configure Codex CLI's native footer.",
+      "category": "development",
+      "source": "./",
+      "homepage": "https://github.com/ggombee/forge-glow"
+    }
+  ]
+}

@@ -2,78 +2,24 @@
 # forge-glow session-init — Claude Code 플러그인 SessionStart 훅
 #
 # 책임:
-#   0. **자체 git pull** (캐시 디렉터리에서 main을 ff-only 갱신) — 본인이 push하면 모든 사용자가 다음 세션 자동 반영
-#   1. ~/.claude/settings.json에 statusLine.command를 현재 캐시 경로로 등록·검증
+#   1. ~/.claude/settings.json에 statusLine.command를 현재 플러그인 경로로 등록·검증
 #   2. 사라진 경로(이전 버전, 청소된 /tmp 등) 자동 정리
-#   3. 기존 다른 statusLine 있으면 자동 wrap (둘 다 표시)
-#   4. 1회만 실행 (마커 파일로 race 방지). 단 경로 mismatch면 재등록.
+#   3. 다른 statusLine을 발견하면 덮어쓰거나 합치지 않고 안내만 출력
+#   4. mkdir 락으로 동시 세션 race 방지
 #
 # 안전:
 #   - jq 없으면 조용히 종료 (settings 손상 방지)
 #   - mkdir 락으로 동시 세션 race 방지
-#   - 모든 변경은 stdout 안내 1줄로 사용자에게 알림
-#   - dirty tree / ff 불가 시 git pull 스킵 (사용자 작업 보호)
+#   - 설정 변경은 stderr 안내로 사용자에게 알림
+#   - 업데이트는 Claude 플러그인 관리자에 맡기며 캐시를 직접 git pull하지 않음
 
 set -uo pipefail
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
-PLUGIN_JSON="$PLUGIN_ROOT/.claude-plugin/plugin.json"
 STATUSLINE="$PLUGIN_ROOT/hud/statusline.sh"
 SETTINGS="$HOME/.claude/settings.json"
 STATE="$HOME/.forge-glow"
 LOCK="$STATE/init.lock"
-MARKER="$STATE/registered-path"
-CACHE_VER="$PLUGIN_ROOT/.plugin-cache-version"
-
-# ─────────────────────────────────────────────────────────────
-# 0. 자체 git pull — code-forge 패턴과 동일
-#    캐시 디렉터리(~/.claude/plugins/cache/.../)는 .git 보유 → ff-only로 안전 갱신
-# ─────────────────────────────────────────────────────────────
-self_update() (
-  # 서브쉘 — cwd / 함수 변경이 호출자에 영향 없음
-  [ ! -d "$PLUGIN_ROOT/.git" ] && exit 0
-  cd "$PLUGIN_ROOT" || exit 0
-
-  git fetch origin --quiet 2>/dev/null || exit 0
-
-  local local_head remote_head
-  local_head=$(git rev-parse HEAD 2>/dev/null || echo "")
-  remote_head=$(git rev-parse origin/main 2>/dev/null || echo "")
-  [ -z "$local_head" ] || [ -z "$remote_head" ] && exit 0
-
-  local local_ver
-  local_ver=$(grep -o '"version": *"[^"]*"' "$PLUGIN_JSON" 2>/dev/null | head -1 | grep -o '[0-9][0-9.]*')
-
-  if [ "$local_head" = "$remote_head" ]; then
-    [ -n "$local_ver" ] && echo "$local_ver" > "$CACHE_VER" 2>/dev/null
-    exit 0
-  fi
-
-  # dirty tree 보호
-  git diff --quiet 2>/dev/null || exit 0
-  git diff --cached --quiet 2>/dev/null || exit 0
-
-  # ff-only 갱신
-  git pull origin main --ff-only --quiet 2>/dev/null || exit 0
-
-  local new_ver prev_ver
-  new_ver=$(grep -o '"version": *"[^"]*"' "$PLUGIN_JSON" 2>/dev/null | head -1 | grep -o '[0-9][0-9.]*')
-  prev_ver="${local_ver}"
-  [ -f "$CACHE_VER" ] && prev_ver=$(cat "$CACHE_VER" 2>/dev/null || echo "$local_ver")
-
-  if [ "$prev_ver" != "$new_ver" ]; then
-    echo "⚡ forge-glow updated: v${prev_ver} → v${new_ver}" >&2
-    local changes
-    changes=$(git log --oneline "${local_head}..HEAD" --no-decorate 2>/dev/null | head -3)
-    [ -n "$changes" ] && echo "Changes:" >&2 && echo "$changes" >&2
-  fi
-  echo "$new_ver" > "$CACHE_VER" 2>/dev/null
-)
-
-self_update
-
-# 자체 갱신 후 statusline.sh 경로가 갱신됐을 수 있으니 변수 다시 평가
-STATUSLINE="$PLUGIN_ROOT/hud/statusline.sh"
 
 # ─────────────────────────────────────────────────────────────
 # Windows CRLF 자동 복구
@@ -130,45 +76,28 @@ fi
 
 # 현재 등록된 statusLine 확인
 EXISTING=$(jq -r '.statusLine.command // empty' "$SETTINGS" 2>/dev/null)
-PREV_REGISTERED=$(cat "$MARKER" 2>/dev/null || echo "")
-
 # 케이스 분기
 if [ -z "$EXISTING" ]; then
   # 1. 미등록 → 신규 등록
   jq --arg cmd "$STATUSLINE" '.statusLine = {
-    "type": "command", "command": $cmd, "refreshInterval": 5, "padding": 1
+    "type": "command", "command": $cmd, "refreshInterval": 15, "padding": 1
   }' "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
-  echo "$STATUSLINE" > "$MARKER"
   echo "[forge-glow] statusLine 등록됨 → $STATUSLINE" >&2
 
 elif [ "$EXISTING" = "$STATUSLINE" ]; then
-  # 2. 같은 경로 등록됨 → 마커만 갱신
-  echo "$STATUSLINE" > "$MARKER"
+  # 2. 같은 경로 등록됨 → 사용자의 refresh/padding 커스텀은 그대로 유지
+  :
 
 elif echo "$EXISTING" | grep -q "forge-glow"; then
-  # 3. forge-glow지만 다른 경로 (버전 변경) → 새 경로로 갱신
+  # 3. forge-glow지만 다른 경로 (버전 변경) → 명령만 갱신하고 사용자 옵션은 보존
   jq --arg cmd "$STATUSLINE" '.statusLine.command = $cmd' \
     "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
-  echo "$STATUSLINE" > "$MARKER"
   echo "[forge-glow] statusLine 경로 갱신 (버전 변경 감지) → $STATUSLINE" >&2
 
-elif [ -n "$EXISTING" ] && [ "$EXISTING" != "$PREV_REGISTERED" ]; then
-  # 4. 다른 도구의 statusLine — 자동 wrap (사용자 의사 존중)
-  WRAPPER="$STATE/wrapper.sh"
-  cat > "$WRAPPER" <<WRAP_EOF
-#!/bin/bash
-# forge-glow wrapper — 자동 생성 ($(date -u +"%Y-%m-%dT%H:%M:%SZ"))
-STDIN=\$(cat)
-echo "\$STDIN" | "$EXISTING" 2>/dev/null
-echo "\$STDIN" | "$STATUSLINE" 2>/dev/null
-WRAP_EOF
-  chmod +x "$WRAPPER"
-  jq --arg cmd "$WRAPPER" '.statusLine.command = $cmd' \
-    "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
-  echo "$STATUSLINE" > "$MARKER"
-  echo "[forge-glow] 기존 statusLine 감지 → 자동 wrap 모드 (둘 다 표시)" >&2
-  echo "[forge-glow]   기존: $EXISTING" >&2
-  echo "[forge-glow]   추가: $STATUSLINE" >&2
+else
+  # 4. 다른 HUD를 자동으로 합치면 세션 경계가 모호해질 수 있다.
+  echo "[forge-glow] 기존 statusLine을 발견해 자동 등록하지 않음: $EXISTING" >&2
+  echo "[forge-glow] 교체하려면 bash '$PLUGIN_ROOT/install.sh'에서 명시적으로 선택하세요." >&2
 fi
 
 exit 0

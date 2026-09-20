@@ -1,0 +1,33 @@
+{
+  "name": "forge-glow",
+  "version": "0.9.0",
+  "description": "Configure and verify a session-correct native status line for Codex CLI.",
+  "author": {
+    "name": "ggombee",
+    "url": "https://github.com/ggombee"
+  },
+  "homepage": "https://github.com/ggombee/forge-glow",
+  "repository": "https://github.com/ggombee/forge-glow",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "statusline",
+    "hud",
+    "session"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Forge Glow",
+    "shortDescription": "Set up a session-correct Codex status line.",
+    "longDescription": "Forge Glow configures Codex CLI's native TUI status line so each terminal displays its own model, context, account limits, repository, and mode without reading another session's logs.",
+    "developerName": "ggombee",
+    "category": "Productivity",
+    "capabilities": [
+      "Codex native status-line setup",
+      "Session-scope verification",
+      "Plugin update guidance"
+    ],
+    "websiteURL": "https://github.com/ggombee/forge-glow",
+    "defaultPrompt": "Use $forge-glow-statusline to configure and verify my Codex CLI status line safely."
+  }
+}

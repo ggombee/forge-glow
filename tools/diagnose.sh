@@ -4,7 +4,7 @@
 # 안 보이는/깨진 statusLine 원인을 사용자가 즉시 파악할 수 있도록 모든 정보 한 번에.
 #
 # 사용:
-#   bash ~/.claude/plugins/cache/forge-market/forge-glow/*/tools/diagnose.sh
+#   등록된 statusLine.command의 forge-glow 설치본에서 tools/diagnose.sh 실행
 #   또는 git clone 받은 경우: bash <repo>/tools/diagnose.sh
 #
 # 출력:
@@ -48,19 +48,33 @@ fi
 if command -v git >/dev/null 2>&1; then
   ok "git: $(git --version 2>&1 | head -1)"
 else
-  err "git 미설치"
+  warn "git 미설치 — 브랜치 표시만 생략됨"
 fi
 
 # ── 3. forge-glow 설치 위치 / 버전 ─────────────────────────
 echo
 echo "[3] forge-glow"
+FOUND_INSTALL=""
+
+# 등록된 statusLine 경로가 가장 정확하다. 그 다음에는 marketplace 이름을
+# 가정하지 않고 모든 Claude plugin cache에서 동일 플러그인 이름을 찾는다.
+if command -v jq >/dev/null 2>&1 && [ -f "$HOME/.claude/settings.json" ]; then
+  REGISTERED_EARLY=$(jq -r '.statusLine.command // empty' "$HOME/.claude/settings.json" 2>/dev/null)
+  case "$REGISTERED_EARLY" in
+    */forge-glow/*/hud/statusline.sh|*/forge-glow/hud/statusline.sh)
+      CANDIDATE_ROOT="${REGISTERED_EARLY%/hud/statusline.sh}"
+      [ -f "$CANDIDATE_ROOT/.claude-plugin/plugin.json" ] && FOUND_INSTALL="$CANDIDATE_ROOT"
+      ;;
+  esac
+fi
+
 PLUGIN_PATHS=(
-  "$HOME/.claude/plugins/cache/forge-market/forge-glow"
+  "$HOME/.claude/plugins/cache"/*/forge-glow
   "$HOME/Desktop/workspace/forge-glow"
   "$HOME/work/forge-glow"
 )
-FOUND_INSTALL=""
 for base in "${PLUGIN_PATHS[@]}"; do
+  [ -n "$FOUND_INSTALL" ] && break
   if [ -d "$base" ]; then
     # 캐시는 버전 디렉터리, dev clone은 직접
     if [ -f "$base/.claude-plugin/plugin.json" ]; then
@@ -86,7 +100,7 @@ if [ -n "$FOUND_INSTALL" ]; then
     err "statusline.sh 없음 또는 실행 권한 없음: $STATUSLINE"
   fi
 else
-  err "forge-glow 설치본을 찾을 수 없음 (~/.claude/plugins/cache/... 또는 dev clone 경로)"
+  err "forge-glow 설치본을 찾을 수 없음 (Claude plugin cache 또는 dev clone 경로)"
 fi
 
 # ── 4. CRLF 검사 (Windows 특이 이슈) ──────────────────────
@@ -94,8 +108,7 @@ echo
 echo "[4] CRLF 줄바꿈 검사 (Windows에서 깨질 수 있음)"
 if [ -n "$FOUND_INSTALL" ] && [ -f "$STATUSLINE" ]; then
   if head -1 "$STATUSLINE" 2>/dev/null | grep -q $'\r'; then
-    err "statusline.sh에 CRLF 잔존 — 다음 세션 시작 시 자동 복구되거나 수동 명령:"
-    echo "       cd \"$FOUND_INSTALL\" && git config core.autocrlf false && git rm --cached -r . && git reset --hard"
+    err "statusline.sh에 CRLF 잔존 — 플러그인을 재설치하거나 LF 설정으로 새로 clone하세요."
   else
     ok "shebang LF 정상"
   fi
@@ -108,8 +121,11 @@ SETTINGS="$HOME/.claude/settings.json"
 if [ ! -f "$SETTINGS" ]; then
   warn "$SETTINGS 없음 — Claude Code 설치/사용 흔적 없음"
 else
-  REGISTERED=$(grep -o '"command":[[:space:]]*"[^"]*"' "$SETTINGS" 2>/dev/null \
-    | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
+  if command -v jq >/dev/null 2>&1; then
+    REGISTERED=$(jq -r '.statusLine.command // empty' "$SETTINGS" 2>/dev/null)
+  else
+    REGISTERED=""
+  fi
   if [ -z "$REGISTERED" ]; then
     warn "statusLine 미등록 — Claude Code 재시작 시 forge-glow plugin이 자동 등록 시도"
   elif echo "$REGISTERED" | grep -q "forge-glow"; then
@@ -119,7 +135,7 @@ else
     fi
   else
     warn "다른 도구의 statusLine 등록됨: $REGISTERED"
-    echo "       (forge-glow는 자동 wrap 시도 — 그래도 안 보이면 수동 교체)"
+    echo "       (forge-glow는 자동 합치기/덮어쓰기를 하지 않음 — install.sh에서 명시적으로 교체 가능)"
   fi
 fi
 
